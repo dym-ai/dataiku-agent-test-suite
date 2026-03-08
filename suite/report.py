@@ -81,81 +81,83 @@ def _first_failure(validation_result):
 
 def _format_check(check):
     name = check["check"]
-    if name == "agent_returncode":
-        return f"agent_returncode(expected {check['expected']}, actual {check['actual']})"
-    if name == "agent_status":
-        return f"agent_status(expected {check['expected']}, actual {check['actual']})"
-    if name == "flow_dataset_count":
-        return f"flow_dataset_count(expected {check['expected']}, actual {check['actual']})"
-    if name == "flow_recipe_count":
-        return f"flow_recipe_count(expected {check['expected']}, actual {check['actual']})"
-    if name == "flow_shape_match":
-        return f"flow_shape_match(nodes {check['expected_nodes']}, recipes {check['expected_recipes']})"
-    if name == "recipe_config_match":
-        return f"recipe_config_match(mode {check['mode']}, compare {check['compare']})"
-    if name == "recipe_config_entry":
-        return f"recipe_config_entry({check['recipe_type']}, inputs {check['inputs']}, outputs {check['outputs']})"
-    if name == "recipe_type_count":
-        return f"recipe_type_count({check['recipe_type']} {check['expected']}, actual {check['actual']})"
-    if name == "forbidden_recipe_type":
-        return f"forbidden_recipe_type({check['recipe_type']}, expected {check['expected']}, actual {check['actual']})"
-    if "dataset" in check:
-        if name == "row_count":
-            return f"row_count({check['dataset']}, expected {check['expected']}, actual {check['actual']})"
-        if name == "schema_columns":
-            return f"schema_columns({check['dataset']})"
-        if name == "schema_types":
-            return f"schema_types({check['dataset']})"
-        if name == "data_values":
-            mode = check.get("sample_mode", "ordered")
-            return f"data_values({check['dataset']}, mode {mode}, sample {check['sample_size']}, mismatches {check['mismatches']})"
-        if name == "exists":
-            return f"exists({check['dataset']})"
-        if name == "data_readable":
-            return f"data_readable({check['dataset']})"
+    formatter = CHECK_FORMATTERS.get(name)
+    if formatter:
+        return formatter(check)
     return name
 
 
 def _format_check_detail(check):
     name = check["check"]
-    if name in {"agent_returncode", "agent_status", "flow_dataset_count", "flow_recipe_count"}:
-        return _expected_actual_detail(check)
-    if name == "flow_shape_match":
-        return check.get("message", "")
-    if name == "recipe_config_match":
-        return check.get("message", "")
-    if name == "recipe_type_count":
-        return _expected_actual_detail(check)
-    if name == "forbidden_recipe_type":
-        return _expected_actual_detail(check)
-    if name == "exists":
-        return check.get("message", "")
-    if name == "schema_columns":
-        return _expected_actual_detail(check)
-    if name == "schema_types":
-        return _expected_actual_detail(check)
-    if name == "row_count":
-        return _expected_actual_detail(check)
-    if name == "data_readable":
-        return check.get("message", "")
-    if name == "data_values":
-        mismatches = check.get("first_mismatches") or []
-        if mismatches:
-            parts = []
-            for mismatch in mismatches[:3]:
-                row = mismatch.get("row", "?")
-                column = mismatch.get("column", "?")
-                expected = mismatch.get("expected")
-                actual = mismatch.get("actual")
-                parts.append(f"row {row} col {column}: expected {expected!r}, actual {actual!r}")
-            return "; ".join(parts)
+    formatter = CHECK_DETAIL_FORMATTERS.get(name)
+    if formatter:
+        return formatter(check)
     return ""
+
+
+def _format_expected_actual(check):
+    return f"{check['check']}(expected {check['expected']}, actual {check['actual']})"
+
+
+def _format_flow_shape(check):
+    return f"flow_shape_match(nodes {check['expected_nodes']}, recipes {check['expected_recipes']})"
+
+
+def _format_recipe_config_match(check):
+    return f"recipe_config_match(mode {check['mode']}, compare {check['compare']})"
+
+
+def _format_recipe_config_entry(check):
+    return f"recipe_config_entry({check['recipe_type']}, inputs {check['inputs']}, outputs {check['outputs']})"
+
+
+def _format_recipe_type_count(check):
+    return f"recipe_type_count({check['recipe_type']} {check['expected']}, actual {check['actual']})"
+
+
+def _format_forbidden_recipe_type(check):
+    return f"forbidden_recipe_type({check['recipe_type']}, expected {check['expected']}, actual {check['actual']})"
+
+
+def _format_row_count(check):
+    return f"row_count({check['dataset']}, expected {check['expected']}, actual {check['actual']})"
+
+
+def _format_dataset_name_only(check):
+    return f"{check['check']}({check['dataset']})"
+
+
+def _format_data_values(check):
+    mode = check.get("sample_mode", "ordered")
+    return (
+        f"data_values({check['dataset']}, mode {mode}, sample {check['sample_size']}, "
+        f"mismatches {check['mismatches']})"
+    )
+
+
+def _format_message_detail(check):
+    return check.get("message", "")
 
 
 def _expected_actual_detail(check):
     if "expected" in check and "actual" in check:
         return f"expected={check['expected']!r}, actual={check['actual']!r}"
     return ""
+
+
+def _format_data_values_detail(check):
+    mismatches = check.get("first_mismatches") or []
+    if not mismatches:
+        return ""
+
+    parts = []
+    for mismatch in mismatches[:3]:
+        row = mismatch.get("row", "?")
+        column = mismatch.get("column", "?")
+        expected = mismatch.get("expected")
+        actual = mismatch.get("actual")
+        parts.append(f"row {row} col {column}: expected {expected!r}, actual {actual!r}")
+    return "; ".join(parts)
 
 
 def _excerpt(text, limit=2000):
@@ -165,3 +167,40 @@ def _excerpt(text, limit=2000):
     if len(trimmed) <= limit:
         return trimmed
     return trimmed[-limit:]
+
+
+CHECK_FORMATTERS = {
+    "agent_returncode": _format_expected_actual,
+    "agent_status": _format_expected_actual,
+    "flow_dataset_count": _format_expected_actual,
+    "flow_recipe_count": _format_expected_actual,
+    "flow_shape_match": _format_flow_shape,
+    "recipe_config_match": _format_recipe_config_match,
+    "recipe_config_entry": _format_recipe_config_entry,
+    "recipe_type_count": _format_recipe_type_count,
+    "forbidden_recipe_type": _format_forbidden_recipe_type,
+    "row_count": _format_row_count,
+    "schema_columns": _format_dataset_name_only,
+    "schema_types": _format_dataset_name_only,
+    "data_values": _format_data_values,
+    "exists": _format_dataset_name_only,
+    "data_readable": _format_dataset_name_only,
+}
+
+
+CHECK_DETAIL_FORMATTERS = {
+    "agent_returncode": _expected_actual_detail,
+    "agent_status": _expected_actual_detail,
+    "flow_dataset_count": _expected_actual_detail,
+    "flow_recipe_count": _expected_actual_detail,
+    "flow_shape_match": _format_message_detail,
+    "recipe_config_match": _format_message_detail,
+    "recipe_type_count": _expected_actual_detail,
+    "forbidden_recipe_type": _expected_actual_detail,
+    "exists": _format_message_detail,
+    "schema_columns": _expected_actual_detail,
+    "schema_types": _expected_actual_detail,
+    "row_count": _expected_actual_detail,
+    "data_readable": _format_message_detail,
+    "data_values": _format_data_values_detail,
+}

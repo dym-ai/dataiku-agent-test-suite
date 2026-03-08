@@ -184,6 +184,12 @@ Common `status` values:
 - `aborted`
 - `unsupported`
 
+Notes on stats:
+
+- `duration_ms`, `total_tokens`, and `tool_uses` are optional
+- For arbitrary external agents, `tool_uses` is most reliable when the agent writes it directly into `response.stats`
+- The bundled wrappers also attempt best-effort extraction from CLI output when possible
+
 ## CLI Output And Artifacts
 
 By default, the CLI prints a compact report:
