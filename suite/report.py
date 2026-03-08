@@ -45,6 +45,8 @@ def format_report(
         lines.append("Agent stats")
         if "duration_ms" in stats:
             lines.append(f"- duration: {stats['duration_ms'] / 1000:.1f}s")
+        if "timeout_seconds" in stats:
+            lines.append(f"- timeout: {stats['timeout_seconds']}s")
         if "total_tokens" in stats:
             lines.append(f"- total tokens: {stats['total_tokens']:,}")
         if "tool_uses" in stats:
