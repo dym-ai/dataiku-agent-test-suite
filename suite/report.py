@@ -25,12 +25,19 @@ def format_report(
     first_failure = _first_failure(validation_result)
     if first_failure:
         lines.append(f"First failure: {_format_check(first_failure)}")
+        detail = _format_check_detail(first_failure)
+        if detail:
+            lines.append(f"Failure detail: {detail}")
 
     lines.append("")
     lines.append("Checks")
     for check in validation_result["checks"]:
         status = "PASS" if check["passed"] else "FAIL"
         lines.append(f"- {_format_check(check)}: {status}")
+        if not check["passed"]:
+            detail = _format_check_detail(check)
+            if detail:
+                lines.append(f"  detail: {detail}")
 
     stats = agent_result.get("stats") or validation_result.get("agent_stats") or {}
     if stats:
@@ -107,6 +114,48 @@ def _format_check(check):
         if name == "data_readable":
             return f"data_readable({check['dataset']})"
     return name
+
+
+def _format_check_detail(check):
+    name = check["check"]
+    if name in {"agent_returncode", "agent_status", "flow_dataset_count", "flow_recipe_count"}:
+        return _expected_actual_detail(check)
+    if name == "flow_shape_match":
+        return check.get("message", "")
+    if name == "recipe_config_match":
+        return check.get("message", "")
+    if name == "recipe_type_count":
+        return _expected_actual_detail(check)
+    if name == "forbidden_recipe_type":
+        return _expected_actual_detail(check)
+    if name == "exists":
+        return check.get("message", "")
+    if name == "schema_columns":
+        return _expected_actual_detail(check)
+    if name == "schema_types":
+        return _expected_actual_detail(check)
+    if name == "row_count":
+        return _expected_actual_detail(check)
+    if name == "data_readable":
+        return check.get("message", "")
+    if name == "data_values":
+        mismatches = check.get("first_mismatches") or []
+        if mismatches:
+            parts = []
+            for mismatch in mismatches[:3]:
+                row = mismatch.get("row", "?")
+                column = mismatch.get("column", "?")
+                expected = mismatch.get("expected")
+                actual = mismatch.get("actual")
+                parts.append(f"row {row} col {column}: expected {expected!r}, actual {actual!r}")
+            return "; ".join(parts)
+    return ""
+
+
+def _expected_actual_detail(check):
+    if "expected" in check and "actual" in check:
+        return f"expected={check['expected']!r}, actual={check['actual']!r}"
+    return ""
 
 
 def _excerpt(text, limit=2000):
