@@ -1,6 +1,7 @@
 """Built-in evaluators for Dataiku agent cases."""
 
 from collections import Counter
+from copy import deepcopy
 
 
 def output_datasets(client, project_key, case, spec):
@@ -11,6 +12,12 @@ def output_datasets(client, project_key, case, spec):
         outputs = case.get("expected_outputs", {})
     if not outputs:
         raise ValueError("output_datasets evaluator requires outputs or case.expected_outputs")
+    sample_mode = spec.get("sample_mode", "unordered")
+    key_columns = spec.get("key_columns", [])
+    if sample_mode not in {"ordered", "unordered", "by_key"}:
+        raise ValueError("output_datasets sample_mode must be 'ordered', 'unordered', or 'by_key'")
+    if sample_mode == "by_key" and not key_columns:
+        raise ValueError("output_datasets key_columns is required when sample_mode='by_key'")
 
     checks = []
     for ds_name, expected in outputs.items():
@@ -79,29 +86,13 @@ def output_datasets(client, project_key, case, spec):
             "actual": len(actual_rows),
         })
 
-        mismatches = []
         sample_data = expected.get("data", [])
-        for i, exp in enumerate(sample_data):
-            if i >= len(actual_rows):
-                mismatches.append({
-                    "row": i,
-                    "column": "*",
-                    "expected": exp,
-                    "actual": "(missing row)",
-                })
-                continue
-
-            actual = actual_rows[i]
-            for col in expected_cols:
-                actual_val = _normalize(actual.get(col))
-                expected_val = _normalize(exp.get(col))
-                if actual_val != expected_val:
-                    mismatches.append({
-                        "row": i,
-                        "column": col,
-                        "expected": expected_val,
-                        "actual": actual_val,
-                    })
+        if sample_mode == "ordered":
+            mismatches = _ordered_sample_mismatches(actual_rows, sample_data, expected_cols)
+        elif sample_mode == "unordered":
+            mismatches = _unordered_sample_mismatches(actual_rows, sample_data, expected_cols)
+        else:
+            mismatches = _keyed_sample_mismatches(actual_rows, sample_data, expected_cols, key_columns)
 
         check = {
             "dataset": ds_name,
@@ -109,10 +100,119 @@ def output_datasets(client, project_key, case, spec):
             "passed": len(mismatches) == 0,
             "sample_size": len(sample_data),
             "mismatches": len(mismatches),
+            "sample_mode": sample_mode,
         }
         if mismatches:
             check["first_mismatches"] = mismatches[:5]
         checks.append(check)
+
+    return checks
+
+
+def flow_shape_match(client, project_key, case, spec):
+    """Validate anonymous flow structure using dataset schemas and recipe connectivity."""
+    project_state = _collect_project_state(client, project_key)
+    expected_nodes = spec.get("nodes", {})
+    expected_recipes = spec.get("recipes", [])
+    if not expected_nodes or not expected_recipes:
+        raise ValueError("flow_shape_match requires non-empty nodes and recipes")
+
+    exact_recipe_count = spec.get("exact_recipe_count", True)
+    exact_dataset_count = spec.get("exact_dataset_count", False)
+    match = _find_alias_assignment(
+        expected_nodes=expected_nodes,
+        expected_recipes=expected_recipes,
+        actual_datasets=project_state["datasets"],
+        actual_recipes=project_state["recipes"],
+    )
+
+    checks = []
+    if exact_dataset_count:
+        checks.append({
+            "check": "flow_dataset_count",
+            "passed": len(project_state["datasets"]) == len(expected_nodes),
+            "expected": len(expected_nodes),
+            "actual": len(project_state["datasets"]),
+        })
+
+    if exact_recipe_count:
+        checks.append({
+            "check": "flow_recipe_count",
+            "passed": len(project_state["recipes"]) == len(expected_recipes),
+            "expected": len(expected_recipes),
+            "actual": len(project_state["recipes"]),
+        })
+
+    check = {
+        "check": "flow_shape_match",
+        "passed": match is not None,
+        "expected_nodes": len(expected_nodes),
+        "expected_recipes": len(expected_recipes),
+    }
+    if match is not None:
+        check["alias_mapping"] = match["assignment"]
+    else:
+        check["message"] = "No dataset-to-schema mapping satisfied the expected recipe graph"
+    checks.append(check)
+    return checks
+
+
+def recipe_config_match(client, project_key, case, spec):
+    """Validate recipe payload/params on a matched anonymous flow."""
+    project_state = _collect_project_state(client, project_key)
+    expected_nodes = spec.get("nodes", {})
+    expected_recipes = spec.get("recipes", [])
+    if not expected_nodes or not expected_recipes:
+        raise ValueError("recipe_config_match requires non-empty nodes and recipes")
+
+    config_mode = spec.get("mode", "raw")
+    compare_mode = spec.get("compare", "subset")
+    if config_mode not in {"raw", "normalized"}:
+        raise ValueError("recipe_config_match mode must be 'raw' or 'normalized'")
+    if compare_mode not in {"subset", "exact"}:
+        raise ValueError("recipe_config_match compare must be 'subset' or 'exact'")
+
+    match = _find_alias_assignment(
+        expected_nodes=expected_nodes,
+        expected_recipes=expected_recipes,
+        actual_datasets=project_state["datasets"],
+        actual_recipes=project_state["recipes"],
+        require_config=True,
+        config_mode=config_mode,
+        compare_mode=compare_mode,
+    )
+
+    checks = []
+    if match is None:
+        checks.append({
+            "check": "recipe_config_match",
+            "passed": False,
+            "mode": config_mode,
+            "compare": compare_mode,
+            "message": "No recipe mapping matched the expected flow shape and recipe config",
+        })
+        return checks
+
+    checks.append({
+        "check": "recipe_config_match",
+        "passed": True,
+        "mode": config_mode,
+        "compare": compare_mode,
+        "matched_recipes": len(expected_recipes),
+        "alias_mapping": match["assignment"],
+    })
+
+    for expected_index, actual_index in sorted(match["recipe_matches"].items()):
+        expected_recipe = expected_recipes[expected_index]
+        actual_recipe = project_state["recipes"][actual_index]
+        checks.append({
+            "check": "recipe_config_entry",
+            "passed": True,
+            "recipe_type": expected_recipe["type"],
+            "inputs": expected_recipe["inputs"],
+            "outputs": expected_recipe["outputs"],
+            "recipe_name": actual_recipe["name"],
+        })
 
     return checks
 
@@ -157,6 +257,214 @@ def forbid_recipe_types(client, project_key, case, spec):
     return checks
 
 
+def _collect_project_state(client, project_key):
+    project = client.get_project(project_key)
+    datasets = {}
+    for dataset in project.list_datasets(as_type="objects"):
+        ds_def = dataset.get_definition()
+        datasets[dataset.name] = {
+            "name": dataset.name,
+            "schema": ds_def.get("schema", {}).get("columns", []),
+            "schema_signature": _schema_signature(ds_def.get("schema", {}).get("columns", [])),
+        }
+
+    recipes = []
+    for recipe_summary in project.list_recipes():
+        recipe = project.get_recipe(recipe_summary["name"])
+        settings = recipe.get_settings()
+        recipes.append({
+            "name": recipe_summary["name"],
+            "type": settings.type,
+            "inputs": sorted(
+                ref for ref in (_strip_project_ref(r, project_key) for r in settings.get_flat_input_refs()) if ref in datasets
+            ),
+            "outputs": sorted(
+                ref for ref in (_strip_project_ref(r, project_key) for r in settings.get_flat_output_refs()) if ref in datasets
+            ),
+            "config_raw": _recipe_config(settings, mode="raw"),
+            "config_normalized": _recipe_config(settings, mode="normalized"),
+        })
+
+    return {"datasets": datasets, "recipes": recipes}
+
+
+def _find_alias_assignment(
+    expected_nodes,
+    expected_recipes,
+    actual_datasets,
+    actual_recipes,
+    require_config=False,
+    config_mode="raw",
+    compare_mode="subset",
+):
+    aliases = sorted(expected_nodes, key=lambda alias: len(_candidate_dataset_names(alias, expected_nodes, actual_datasets)))
+    candidates = {alias: _candidate_dataset_names(alias, expected_nodes, actual_datasets) for alias in aliases}
+    if any(len(names) == 0 for names in candidates.values()):
+        return None
+
+    def search(index, assignment, used_dataset_names):
+        if index == len(aliases):
+            recipe_matches = _find_recipe_matches(
+                expected_recipes=expected_recipes,
+                actual_recipes=actual_recipes,
+                assignment=assignment,
+                require_config=require_config,
+                config_mode=config_mode,
+                compare_mode=compare_mode,
+            )
+            if recipe_matches is None:
+                return None
+            return {
+                "assignment": dict(assignment),
+                "recipe_matches": recipe_matches,
+            }
+
+        alias = aliases[index]
+        for dataset_name in candidates[alias]:
+            if dataset_name in used_dataset_names:
+                continue
+            assignment[alias] = dataset_name
+            used_dataset_names.add(dataset_name)
+            result = search(index + 1, assignment, used_dataset_names)
+            if result is not None:
+                return result
+            used_dataset_names.remove(dataset_name)
+            del assignment[alias]
+        return None
+
+    return search(0, {}, set())
+
+
+def _find_recipe_matches(
+    expected_recipes,
+    actual_recipes,
+    assignment,
+    require_config=False,
+    config_mode="raw",
+    compare_mode="subset",
+):
+    candidates = {}
+    for expected_index, expected_recipe in enumerate(expected_recipes):
+        expected_inputs = sorted(assignment[alias] for alias in expected_recipe["inputs"])
+        expected_outputs = sorted(assignment[alias] for alias in expected_recipe["outputs"])
+        matching_actuals = []
+        for actual_index, actual_recipe in enumerate(actual_recipes):
+            if actual_recipe["type"] != expected_recipe["type"]:
+                continue
+            if actual_recipe["inputs"] != expected_inputs:
+                continue
+            if actual_recipe["outputs"] != expected_outputs:
+                continue
+            if require_config and not _config_matches(
+                expected_recipe.get("config", {}),
+                actual_recipe[f"config_{config_mode}"],
+                compare_mode=compare_mode,
+                config_mode=config_mode,
+            ):
+                continue
+            matching_actuals.append(actual_index)
+        candidates[expected_index] = matching_actuals
+
+    if any(len(indices) == 0 for indices in candidates.values()):
+        return None
+
+    ordered_expected = sorted(candidates, key=lambda idx: len(candidates[idx]))
+
+    def search(index, used_actual_indices, mapping):
+        if index == len(ordered_expected):
+            return dict(mapping)
+
+        expected_index = ordered_expected[index]
+        for actual_index in candidates[expected_index]:
+            if actual_index in used_actual_indices:
+                continue
+            mapping[expected_index] = actual_index
+            used_actual_indices.add(actual_index)
+            result = search(index + 1, used_actual_indices, mapping)
+            if result is not None:
+                return result
+            used_actual_indices.remove(actual_index)
+            del mapping[expected_index]
+        return None
+
+    return search(0, set(), {})
+
+
+def _candidate_dataset_names(alias, expected_nodes, actual_datasets):
+    expected_schema = _schema_signature(expected_nodes[alias]["schema"])
+    return [
+        dataset_name
+        for dataset_name, dataset in actual_datasets.items()
+        if dataset["schema_signature"] == expected_schema
+    ]
+
+
+def _recipe_config(settings, mode):
+    config = {
+        "params": deepcopy(settings.get_recipe_params() or {}),
+        "payload": _recipe_payload(settings),
+    }
+    if mode == "raw":
+        return config
+    if mode == "normalized":
+        return _prune_empty(config)
+    raise ValueError(f"Unsupported recipe config mode: {mode}")
+
+
+def _recipe_payload(settings):
+    try:
+        return deepcopy(settings.get_json_payload())
+    except Exception:
+        return settings.get_payload()
+
+
+def _config_matches(expected_config, actual_config, compare_mode, config_mode):
+    if compare_mode == "exact":
+        if config_mode == "normalized":
+            return _prune_empty(deepcopy(expected_config)) == actual_config
+        return deepcopy(expected_config) == actual_config
+    if compare_mode == "subset":
+        return _is_subset(_prune_empty(deepcopy(expected_config)), actual_config)
+    raise ValueError(f"Unsupported compare mode: {compare_mode}")
+
+
+def _is_subset(expected, actual):
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return False
+        return all(key in actual and _is_subset(value, actual[key]) for key, value in expected.items())
+
+    if isinstance(expected, list):
+        if not isinstance(actual, list) or len(expected) > len(actual):
+            return False
+        return all(_is_subset(expected[index], actual[index]) for index in range(len(expected)))
+
+    return expected == actual
+
+
+def _prune_empty(value):
+    if isinstance(value, dict):
+        pruned = {}
+        for key, item in value.items():
+            normalized = _prune_empty(item)
+            if normalized in (None, {}, []):
+                continue
+            pruned[key] = normalized
+        return pruned
+
+    if isinstance(value, list):
+        return [_prune_empty(item) for item in value]
+
+    return value
+
+
+def _schema_signature(columns):
+    return tuple(
+        (column.get("name"), column.get("type"))
+        for column in columns
+    )
+
+
 def _get_recipe_type_counts(client, project_key):
     project = client.get_project(project_key)
     counts = Counter()
@@ -164,6 +472,13 @@ def _get_recipe_type_counts(client, project_key):
         recipe = project.get_recipe(recipe_summary["name"])
         counts[recipe.get_settings().type] += 1
     return counts
+
+
+def _strip_project_ref(ref, project_key):
+    prefix = f"{project_key}."
+    if ref.startswith(prefix):
+        return ref[len(prefix):]
+    return ref
 
 
 def _read_rows(ds):
@@ -176,6 +491,119 @@ def _read_rows(ds):
         else:
             rows.append(dict(zip(col_names, row)))
     return rows
+
+
+def _ordered_sample_mismatches(actual_rows, sample_data, expected_cols):
+    mismatches = []
+    for index, expected_row in enumerate(sample_data):
+        if index >= len(actual_rows):
+            mismatches.append({
+                "row": index,
+                "column": "*",
+                "expected": expected_row,
+                "actual": "(missing row)",
+            })
+            continue
+
+        mismatches.extend(_row_mismatches(index, actual_rows[index], expected_row, expected_cols))
+    return mismatches
+
+
+def _unordered_sample_mismatches(actual_rows, sample_data, expected_cols):
+    mismatches = []
+    remaining_indices = set(range(len(actual_rows)))
+
+    for index, expected_row in enumerate(sample_data):
+        matched_index = None
+        matched_row_mismatches = None
+
+        for actual_index in sorted(remaining_indices):
+            candidate_mismatches = _row_mismatches(index, actual_rows[actual_index], expected_row, expected_cols)
+            if not candidate_mismatches:
+                matched_index = actual_index
+                matched_row_mismatches = []
+                break
+            if matched_row_mismatches is None or len(candidate_mismatches) < len(matched_row_mismatches):
+                matched_row_mismatches = candidate_mismatches
+
+        if matched_index is not None:
+            remaining_indices.remove(matched_index)
+            continue
+
+        if matched_row_mismatches:
+            mismatches.extend(matched_row_mismatches[:1])
+        else:
+            mismatches.append({
+                "row": index,
+                "column": "*",
+                "expected": expected_row,
+                "actual": "(no matching row found)",
+            })
+
+    return mismatches
+
+
+def _keyed_sample_mismatches(actual_rows, sample_data, expected_cols, key_columns):
+    mismatches = []
+    actual_by_key = {}
+
+    for actual_index, actual_row in enumerate(actual_rows):
+        key = _row_key(actual_row, key_columns)
+        if key in actual_by_key:
+            mismatches.append({
+                "row": actual_index,
+                "column": ",".join(key_columns),
+                "expected": "(unique key)",
+                "actual": f"duplicate actual key {key}",
+            })
+            continue
+        actual_by_key[key] = actual_row
+
+    seen_expected_keys = set()
+    for index, expected_row in enumerate(sample_data):
+        key = _row_key(expected_row, key_columns)
+        if key in seen_expected_keys:
+            mismatches.append({
+                "row": index,
+                "column": ",".join(key_columns),
+                "expected": "(unique key)",
+                "actual": f"duplicate expected key {key}",
+            })
+            continue
+        seen_expected_keys.add(key)
+
+        actual_row = actual_by_key.get(key)
+        if actual_row is None:
+            mismatches.append({
+                "row": index,
+                "column": ",".join(key_columns),
+                "expected": key,
+                "actual": "(missing key)",
+            })
+            continue
+
+        mismatches.extend(_row_mismatches(index, actual_row, expected_row, expected_cols))
+
+    return mismatches
+
+
+def _row_key(row, key_columns):
+    return tuple(_normalize(row.get(column)) for column in key_columns)
+
+
+def _row_mismatches(index, actual_row, expected_row, expected_cols):
+    mismatches = []
+    for col in expected_cols:
+        actual_val = _normalize(actual_row.get(col))
+        expected_val = _normalize(expected_row.get(col))
+        if actual_val != expected_val:
+            mismatches.append({
+                "row": index,
+                "column": col,
+                "expected": expected_val,
+                "actual": actual_val,
+            })
+    return mismatches
 
 
 def _normalize(val):
@@ -200,6 +628,8 @@ def _normalize(val):
 
 BUILTIN_EVALUATORS = {
     "output_datasets": output_datasets,
+    "flow_shape_match": flow_shape_match,
+    "recipe_config_match": recipe_config_match,
     "recipe_type_counts": recipe_type_counts,
     "forbid_recipe_types": forbid_recipe_types,
 }

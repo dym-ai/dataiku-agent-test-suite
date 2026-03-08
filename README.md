@@ -235,13 +235,52 @@ Example:
   "evals": [
     {"name": "output_datasets"},
     {
-      "name": "recipe_type_counts",
-      "expected": [
-        {"type": "shaker", "count": 1},
-        {"type": "grouping", "count": 1}
+      "name": "flow_shape_match",
+      "nodes": {
+        "source": {
+          "schema": [
+            {"name": "raw_date", "type": "string"}
+          ]
+        },
+        "final": {
+          "schema": [
+            {"name": "column_name", "type": "bigint"}
+          ]
+        }
+      },
+      "recipes": [
+        {"type": "shaker", "inputs": ["source"], "outputs": ["final"]}
       ]
     },
-    {"name": "forbid_recipe_types", "types": ["python"]}
+    {
+      "name": "recipe_config_match",
+      "mode": "raw",
+      "compare": "subset",
+      "nodes": {
+        "source": {
+          "schema": [
+            {"name": "raw_date", "type": "string"}
+          ]
+        },
+        "final": {
+          "schema": [
+            {"name": "column_name", "type": "bigint"}
+          ]
+        }
+      },
+      "recipes": [
+        {
+          "type": "shaker",
+          "inputs": ["source"],
+          "outputs": ["final"],
+          "config": {
+            "payload": {
+              "steps": []
+            }
+          }
+        }
+      ]
+    }
   ]
 }
 ```
@@ -258,8 +297,31 @@ Key fields:
 Built-in evaluator names:
 
 - `output_datasets`: validates dataset existence, schema, row counts, and sampled values
+- `flow_shape_match`: compares an anonymous flow graph using dataset schemas, recipe types, and recipe connectivity
+- `recipe_config_match`: compares recipe payload/params for matched recipes in an anonymous flow graph
 - `recipe_type_counts`: checks exact recipe counts by type
 - `forbid_recipe_types`: fails if forbidden recipe types are present
+
+Anonymous flow graph format:
+
+- `nodes`: a map of user-defined aliases to dataset schemas
+- `recipes`: a list of recipe specs using those aliases in `inputs` and `outputs`
+- Alias names are only placeholders inside the test case; they are not compared to actual DSS dataset names
+
+`recipe_config_match` options:
+
+- `mode`: `raw` or `normalized`
+- `compare`: `subset` or `exact`
+- `config`: expected recipe config fragment shaped like `{"payload": ..., "params": ...}`
+- In `subset` mode, dicts are matched by key subset and lists are matched by ordered prefix
+
+`output_datasets` options:
+
+- `sample_mode`: `unordered` (default), `ordered`, or `by_key`
+- `key_columns`: required when `sample_mode` is `by_key`
+- `ordered` compares sample rows against the first `N` output rows by position
+- `unordered` checks that each expected sample row appears somewhere in the dataset, regardless of order
+- `by_key` matches expected sample rows to actual rows using the provided key columns
 
 Custom evaluators:
 

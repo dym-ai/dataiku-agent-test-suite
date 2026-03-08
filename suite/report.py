@@ -78,6 +78,16 @@ def _format_check(check):
         return f"agent_returncode(expected {check['expected']}, actual {check['actual']})"
     if name == "agent_status":
         return f"agent_status(expected {check['expected']}, actual {check['actual']})"
+    if name == "flow_dataset_count":
+        return f"flow_dataset_count(expected {check['expected']}, actual {check['actual']})"
+    if name == "flow_recipe_count":
+        return f"flow_recipe_count(expected {check['expected']}, actual {check['actual']})"
+    if name == "flow_shape_match":
+        return f"flow_shape_match(nodes {check['expected_nodes']}, recipes {check['expected_recipes']})"
+    if name == "recipe_config_match":
+        return f"recipe_config_match(mode {check['mode']}, compare {check['compare']})"
+    if name == "recipe_config_entry":
+        return f"recipe_config_entry({check['recipe_type']}, inputs {check['inputs']}, outputs {check['outputs']})"
     if name == "recipe_type_count":
         return f"recipe_type_count({check['recipe_type']} {check['expected']}, actual {check['actual']})"
     if name == "forbidden_recipe_type":
@@ -90,7 +100,8 @@ def _format_check(check):
         if name == "schema_types":
             return f"schema_types({check['dataset']})"
         if name == "data_values":
-            return f"data_values({check['dataset']}, sample {check['sample_size']}, mismatches {check['mismatches']})"
+            mode = check.get("sample_mode", "ordered")
+            return f"data_values({check['dataset']}, mode {mode}, sample {check['sample_size']}, mismatches {check['mismatches']})"
         if name == "exists":
             return f"exists({check['dataset']})"
         if name == "data_readable":
