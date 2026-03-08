@@ -4,6 +4,7 @@ import json
 import shlex
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from .stats import normalize_stats
@@ -23,7 +24,7 @@ def build_request(case_name, case, workspace=None):
     }
 
 
-def run_agent_command(agent_command, request):
+def run_agent_command(agent_command, request, timeout_seconds=None):
     """Run an agent command with request/response JSON files."""
     if not agent_command:
         raise ValueError("Agent command is required")
@@ -35,11 +36,25 @@ def run_agent_command(agent_command, request):
         response_path = temp_path / "response.json"
         request_path.write_text(json.dumps(request, indent=2))
 
-        completed = subprocess.run(
-            [*args, "--request", str(request_path), "--response", str(response_path)],
-            capture_output=True,
-            text=True,
-        )
+        started_at = time.monotonic()
+        try:
+            completed = subprocess.run(
+                [*args, "--request", str(request_path), "--response", str(response_path)],
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            response = _load_response(response_path)
+            return _build_timeout_result(
+                exc,
+                response,
+                elapsed_ms=int((time.monotonic() - started_at) * 1000),
+                timeout_seconds=timeout_seconds,
+            )
+        except OSError as exc:
+            response = _load_response(response_path)
+            return _build_launch_error_result(exc, response)
 
         response = _load_response(response_path)
         return _merge_result(completed, response)
@@ -74,3 +89,41 @@ def _merge_result(completed, response):
     result["stats"] = normalize_stats(result.get("stats", {}))
     result["agent_returncode"] = completed.returncode
     return result
+
+
+def _build_timeout_result(exc, response, elapsed_ms, timeout_seconds):
+    result = dict(response)
+    result.setdefault("version", PROTOCOL_VERSION)
+    result["status"] = "aborted"
+    result["summary"] = f"Agent timed out after {timeout_seconds}s"
+    result["stdout"] = result.get("stdout") or _coerce_text(exc.stdout)
+    result["stderr"] = result.get("stderr") or _coerce_text(exc.stderr)
+    stats = dict(result.get("stats") or {})
+    stats["duration_ms"] = elapsed_ms
+    if timeout_seconds is not None:
+        stats["timeout_seconds"] = timeout_seconds
+    result["stats"] = stats
+    result["agent_returncode"] = None
+    result["error_type"] = "timeout"
+    return result
+
+
+def _build_launch_error_result(exc, response):
+    result = dict(response)
+    result.setdefault("version", PROTOCOL_VERSION)
+    result["status"] = "failed"
+    result["summary"] = f"Failed to launch agent command: {exc}"
+    result["stdout"] = result.get("stdout") or ""
+    result["stderr"] = result.get("stderr") or str(exc)
+    result.setdefault("stats", {})
+    result["agent_returncode"] = None
+    result["error_type"] = "launch_error"
+    return result
+
+
+def _coerce_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value

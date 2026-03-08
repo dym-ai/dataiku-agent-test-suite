@@ -99,7 +99,15 @@ def _write_artifacts(artifacts_root, project_key, request, agent_result, validat
     return artifact_dir
 
 
-def run(case_name, agent_name, keep=False, workspace=None, verbose=False, artifacts_dir=None):
+def run(
+    case_name,
+    agent_name,
+    keep=False,
+    workspace=None,
+    verbose=False,
+    artifacts_dir=None,
+    agent_timeout_seconds=900,
+):
     url = os.environ["DATAIKU_URL"]
     key = os.environ["DATAIKU_API_KEY"]
     client = dataikuapi.DSSClient(url, key)
@@ -118,7 +126,11 @@ def run(case_name, agent_name, keep=False, workspace=None, verbose=False, artifa
         agent_command = _resolve_agent_command(agent_name)
         print(f"\n--- Running agent...")
         request = build_request(case_name, case, workspace=workspace)
-        agent_result = run_agent_command(agent_command, request)
+        agent_result = run_agent_command(
+            agent_command,
+            request,
+            timeout_seconds=agent_timeout_seconds,
+        )
         print(agent_result.get("summary", "Agent completed"))
 
         print(f"\n--- Validating...")
@@ -152,7 +164,10 @@ def run(case_name, agent_name, keep=False, workspace=None, verbose=False, artifa
             print(f"\n--- Keeping project: {case['project_key']}")
         else:
             print(f"\n--- Cleaning up...")
-            teardown(client, case["project_key"])
+            try:
+                teardown(client, case["project_key"])
+            except Exception as exc:
+                print(f"Cleanup failed for {case['project_key']}: {exc}")
 
     return result
 
@@ -170,6 +185,12 @@ if __name__ == "__main__":
         "--artifacts-dir",
         help="Directory where full request/response/report artifacts should be written",
     )
+    parser.add_argument(
+        "--agent-timeout-seconds",
+        type=int,
+        default=900,
+        help="Maximum time to wait for the agent process before aborting it (default: 900)",
+    )
     parser.add_argument("--agent", help="Agent to run (required)")
     args = parser.parse_args()
 
@@ -185,5 +206,6 @@ if __name__ == "__main__":
         workspace=Path(args.workspace).resolve() if args.workspace else Path.cwd(),
         verbose=args.verbose,
         artifacts_dir=Path(args.artifacts_dir).resolve() if args.artifacts_dir else None,
+        agent_timeout_seconds=args.agent_timeout_seconds,
     )
     sys.exit(0 if result["passed"] else 1)

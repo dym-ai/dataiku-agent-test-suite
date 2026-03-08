@@ -3,6 +3,7 @@
 import importlib
 import json
 import time
+import uuid
 from pathlib import Path
 
 from .builtins import BUILTIN_EVALUATORS, BUILTIN_EVALUATOR_VALIDATORS
@@ -40,26 +41,33 @@ def setup(client, case_name):
     case = _load_case(case_name)
     source_project = client.get_project(case["source_project"])
 
-    ts = int(time.time())
-    project_key = f"DATAIKU_EVAL_{case_name.upper()}_{ts}"
+    project_key = _build_project_key(case_name)
     auth_info = client.get_auth_info()
     owner = auth_info.get("associatedDSSUser") or auth_info["authIdentifier"]
-    client.create_project(project_key, project_key, owner=owner)
-    test_project = client.get_project(project_key)
 
-    copied_names = []
-    for ds_name in case["sources"]:
-        source_ds = source_project.get_dataset(ds_name)
-        target_name = ds_name
+    created_project = False
+    try:
+        client.create_project(project_key, project_key, owner=owner)
+        created_project = True
+        test_project = client.get_project(project_key)
 
-        builder = test_project.new_managed_dataset(target_name)
-        builder.with_store_into("filesystem_managed")
-        builder.create()
+        copied_names = []
+        for ds_name in case["sources"]:
+            source_ds = source_project.get_dataset(ds_name)
+            target_name = ds_name
 
-        target_ds = test_project.get_dataset(target_name)
-        future = source_ds.copy_to(target_ds, sync_schema=True)
-        future.wait_for_result()
-        copied_names.append(target_name)
+            builder = test_project.new_managed_dataset(target_name)
+            builder.with_store_into("filesystem_managed")
+            builder.create()
+
+            target_ds = test_project.get_dataset(target_name)
+            future = source_ds.copy_to(target_ds, sync_schema=True)
+            future.wait_for_result()
+            copied_names.append(target_name)
+    except Exception:
+        if created_project:
+            _delete_project_quietly(client, project_key)
+        raise
 
     return {
         "project_key": project_key,
@@ -138,6 +146,20 @@ def _validate_eval_spec(case, spec, path, index):
         raise
     except ValueError as exc:
         raise CaseValidationError(f"{path}: evals[{index}] invalid: {exc}") from exc
+
+
+def _build_project_key(case_name):
+    ts = int(time.time())
+    suffix = uuid.uuid4().hex[:8].upper()
+    safe_case_name = "".join(ch if ch.isalnum() else "_" for ch in case_name.upper()).strip("_")
+    return f"BOBTEST_{safe_case_name}_{ts}_{suffix}"
+
+
+def _delete_project_quietly(client, project_key):
+    try:
+        client.get_project(project_key).delete()
+    except Exception:
+        pass
 
 
 def _resolve_evaluator(name):

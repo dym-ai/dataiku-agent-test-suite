@@ -63,6 +63,7 @@ Write the full request/response/report/transcript bundle to disk:
 ```bash
 python run_test.py dates \
   --agent codex \
+  --agent-timeout-seconds 600 \
   --artifacts-dir /path/to/output-artifacts
 ```
 
@@ -115,6 +116,8 @@ python /path/to/my_agent.py --request /tmp/request.json --response /tmp/response
 ```
 
 `--workspace` is not passed on the command line. Instead, the workspace path is included in the request JSON. Your agent can use it as its working directory if that is helpful.
+
+Use `--agent-timeout-seconds` to cap how long the harness waits for the agent process before marking the run as aborted.
 
 The bundled scripts live in:
 
