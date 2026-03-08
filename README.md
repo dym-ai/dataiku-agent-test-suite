@@ -49,7 +49,7 @@ Run Codex from another workspace:
 ```bash
 python run_test.py dates \
   --agent codex \
-  --workspace /Users/dmitriryssev/Documents/GitHub/dataiku-agent-dev-kit
+  --workspace /path/to/your/agent-workspace
 ```
 
 Show transcript excerpts in the terminal report:
@@ -63,7 +63,7 @@ Write the full request/response/report/transcript bundle to disk:
 ```bash
 python run_test.py dates \
   --agent codex \
-  --artifacts-dir /tmp/dataiku-agent-runs
+  --artifacts-dir /path/to/output-artifacts
 ```
 
 ## Layout
@@ -142,7 +142,7 @@ The request JSON currently looks like this:
 {
   "version": 1,
   "case_name": "dates",
-  "project_key": "BOBTEST_DATES_1772835245",
+  "project_key": "DATAIKU_EVAL_DATES_1772835245",
   "prompt": "The natural language task...",
   "sources": ["Dates"],
   "workspace": "/path/to/agent/workspace"
@@ -298,6 +298,12 @@ Built-in evaluator names:
 - `recipe_type_counts`: checks exact recipe counts by type
 - `forbid_recipe_types`: fails if forbidden recipe types are present
 
+Case validation:
+
+- The harness validates case files before setup starts
+- Base case fields are always required: `name`, `description`, `prompt`, `source_project`, `sources`
+- Each configured evaluator also validates its own spec and fails early with a targeted error if required fields are missing
+
 Anonymous flow graph format:
 
 - `nodes`: a map of user-defined aliases to dataset schemas
@@ -323,6 +329,7 @@ Custom evaluators:
 
 - Use `module_name:function_name` in `evals[].name`
 - The function should accept `(client, project_key, case, spec)` and return a list of check dicts
+- A custom evaluator can optionally expose a callable `validate_spec(spec, case)` attribute for early validation
 - This lets you add local Python evaluators without changing the harness core
 
 Then run it:

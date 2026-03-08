@@ -5,16 +5,28 @@ import json
 import time
 from pathlib import Path
 
-from .builtins import BUILTIN_EVALUATORS
+from .builtins import BUILTIN_EVALUATORS, BUILTIN_EVALUATOR_VALIDATORS
 
 CASES_DIR = Path(__file__).parent.parent / "cases"
 DEFAULT_EVALS = [{"name": "output_datasets"}]
+REQUIRED_CASE_FIELDS = {
+    "name": str,
+    "description": str,
+    "prompt": str,
+    "source_project": str,
+}
+
+
+class CaseValidationError(ValueError):
+    """Raised when a case definition is invalid."""
 
 
 def _load_case(name):
     path = CASES_DIR / f"{name}.json"
     with open(path) as f:
-        return json.load(f)
+        case = json.load(f)
+    _validate_case(case, path)
+    return case
 
 
 def setup(client, case_name):
@@ -29,7 +41,7 @@ def setup(client, case_name):
     source_project = client.get_project(case["source_project"])
 
     ts = int(time.time())
-    project_key = f"BOBTEST_{case_name.upper()}_{ts}"
+    project_key = f"DATAIKU_EVAL_{case_name.upper()}_{ts}"
     auth_info = client.get_auth_info()
     owner = auth_info.get("associatedDSSUser") or auth_info["authIdentifier"]
     client.create_project(project_key, project_key, owner=owner)
@@ -63,7 +75,7 @@ def validate(client, case_name, project_key, agent_stats=None):
 
     for spec in case.get("evals") or DEFAULT_EVALS:
         evaluator_name = spec["name"]
-        evaluator = _resolve_evaluator(evaluator_name)
+        evaluator, _ = _resolve_evaluator(evaluator_name)
         eval_checks = evaluator(client, project_key, case, spec)
         for check in eval_checks:
             check.setdefault("evaluator", evaluator_name)
@@ -83,9 +95,54 @@ def teardown(client, project_key):
     client.get_project(project_key).delete()
 
 
+def _validate_case(case, path):
+    if not isinstance(case, dict):
+        raise CaseValidationError(f"{path}: case file must contain a JSON object")
+
+    for field_name, field_type in REQUIRED_CASE_FIELDS.items():
+        if field_name not in case:
+            raise CaseValidationError(f"{path}: missing required field '{field_name}'")
+        if not isinstance(case[field_name], field_type) or not case[field_name].strip():
+            raise CaseValidationError(f"{path}: field '{field_name}' must be a non-empty {field_type.__name__}")
+
+    sources = case.get("sources")
+    if not isinstance(sources, list) or not sources:
+        raise CaseValidationError(f"{path}: field 'sources' must be a non-empty list")
+    for index, source_name in enumerate(sources):
+        if not isinstance(source_name, str) or not source_name.strip():
+            raise CaseValidationError(f"{path}: sources[{index}] must be a non-empty string")
+
+    eval_specs = case.get("evals") or DEFAULT_EVALS
+    if not isinstance(eval_specs, list) or not eval_specs:
+        raise CaseValidationError(f"{path}: field 'evals' must be a non-empty list when provided")
+
+    for index, spec in enumerate(eval_specs):
+        _validate_eval_spec(case, spec, path, index)
+
+
+def _validate_eval_spec(case, spec, path, index):
+    if not isinstance(spec, dict):
+        raise CaseValidationError(f"{path}: evals[{index}] must be an object")
+
+    name = spec.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise CaseValidationError(f"{path}: evals[{index}].name must be a non-empty string")
+
+    _, validator = _resolve_evaluator(name)
+    if validator is None:
+        return
+
+    try:
+        validator(spec, case)
+    except CaseValidationError:
+        raise
+    except ValueError as exc:
+        raise CaseValidationError(f"{path}: evals[{index}] invalid: {exc}") from exc
+
+
 def _resolve_evaluator(name):
     if name in BUILTIN_EVALUATORS:
-        return BUILTIN_EVALUATORS[name]
+        return BUILTIN_EVALUATORS[name], BUILTIN_EVALUATOR_VALIDATORS.get(name)
 
     if ":" not in name:
         raise ValueError(
@@ -99,4 +156,8 @@ def _resolve_evaluator(name):
     except AttributeError as exc:
         raise ValueError(f"Custom evaluator '{name}' was not found") from exc
 
-    return evaluator
+    validator = getattr(evaluator, "validate_spec", None)
+    if validator is not None and not callable(validator):
+        raise ValueError(f"Custom evaluator '{name}' has a non-callable validate_spec attribute")
+
+    return evaluator, validator
