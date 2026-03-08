@@ -218,9 +218,6 @@ Example:
   "prompt": "The natural language task to give the agent...",
   "source_project": "MY_PROJECT",
   "sources": ["Source_Dataset_Name"],
-  "source_renames": {
-    "Ugly_Long_Dataset_Name": "Clean_Name"
-  },
   "expected_outputs": {
     "final_output": {
       "schema": [
@@ -290,7 +287,6 @@ Key fields:
 - `source_project`: Dataiku project containing the source datasets
 - `prompt`: the task the agent sees
 - `sources`: datasets copied into the generated project before the agent runs
-- `source_renames`: optional source dataset renames for cleaner prompts and flows
 - `expected_outputs`: final datasets used by the default `output_datasets` evaluator
 - `evals`: optional evaluator list; if omitted, the harness runs the default `output_datasets` evaluator only
 

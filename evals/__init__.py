@@ -35,11 +35,10 @@ def setup(client, case_name):
     client.create_project(project_key, project_key, owner=owner)
     test_project = client.get_project(project_key)
 
-    renames = case.get("source_renames", {})
     copied_names = []
     for ds_name in case["sources"]:
         source_ds = source_project.get_dataset(ds_name)
-        target_name = renames.get(ds_name, ds_name)
+        target_name = ds_name
 
         builder = test_project.new_managed_dataset(target_name)
         builder.with_store_into("filesystem_managed")
