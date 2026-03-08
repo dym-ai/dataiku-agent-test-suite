@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .stats import normalize_stats
+
 PROTOCOL_VERSION = 1
 
 
@@ -69,6 +71,6 @@ def _merge_result(completed, response):
     )
     result.setdefault("stdout", result.get("stdout") or completed.stdout)
     result.setdefault("stderr", result.get("stderr") or completed.stderr)
-    result.setdefault("stats", {})
+    result["stats"] = normalize_stats(result.get("stats", {}))
     result["agent_returncode"] = completed.returncode
     return result

@@ -4,7 +4,6 @@
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -13,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from suite.prompting import build_agent_prompt
+from suite.stats import extract_stats, normalize_stats
 
 
 def main():
@@ -36,7 +36,7 @@ def main():
     )
     duration_ms = int((time.time() - start) * 1000)
 
-    stats = _parse_stats(result.stdout)
+    stats = normalize_stats(extract_stats(result.stdout, result.stderr))
     stats["duration_ms"] = duration_ms
     response = {
         "version": 1,
@@ -51,22 +51,5 @@ def main():
 
 def _build_prompt(request):
     return build_agent_prompt(request)
-
-
-def _parse_stats(stdout):
-    stats = {}
-    for line in stdout.splitlines():
-        line = line.strip()
-        if "total_tokens" in line:
-            match = re.search(r"total_tokens[:\s]+(\d+)", line)
-            if match:
-                stats["total_tokens"] = int(match.group(1))
-        if "tool_uses" in line or "tool_calls" in line:
-            match = re.search(r"(?:tool_uses|tool_calls)[:\s]+(\d+)", line)
-            if match:
-                stats["tool_uses"] = int(match.group(1))
-    return stats
-
-
 if __name__ == "__main__":
     main()

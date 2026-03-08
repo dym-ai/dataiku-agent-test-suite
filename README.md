@@ -49,7 +49,7 @@ Run Codex from another workspace:
 ```bash
 python run_test.py dates \
   --agent codex \
-  --workspace /Users/dmitriryssev/Documents/GitHub/dataiku-agent-dev-kit
+  --workspace /path/to/your/agent-workspace
 ```
 
 Show transcript excerpts in the terminal report:
@@ -63,7 +63,7 @@ Write the full request/response/report/transcript bundle to disk:
 ```bash
 python run_test.py dates \
   --agent codex \
-  --artifacts-dir /tmp/dataiku-agent-runs
+  --artifacts-dir /path/to/output-artifacts
 ```
 
 ## Layout
@@ -142,7 +142,7 @@ The request JSON currently looks like this:
 {
   "version": 1,
   "case_name": "dates",
-  "project_key": "BOBTEST_DATES_1772835245",
+  "project_key": "DATAIKU_EVAL_DATES_1772835245",
   "prompt": "The natural language task...",
   "sources": ["Dates"],
   "workspace": "/path/to/agent/workspace"
@@ -184,6 +184,12 @@ Common `status` values:
 - `aborted`
 - `unsupported`
 
+Notes on stats:
+
+- `duration_ms`, `total_tokens`, and `tool_uses` are optional
+- For arbitrary external agents, `tool_uses` is most reliable when the agent writes it directly into `response.stats`
+- The bundled wrappers also attempt best-effort extraction from CLI output when possible
+
 ## CLI Output And Artifacts
 
 By default, the CLI prints a compact report:
@@ -218,9 +224,6 @@ Example:
   "prompt": "The natural language task to give the agent...",
   "source_project": "MY_PROJECT",
   "sources": ["Source_Dataset_Name"],
-  "source_renames": {
-    "Ugly_Long_Dataset_Name": "Clean_Name"
-  },
   "expected_outputs": {
     "final_output": {
       "schema": [
@@ -290,7 +293,6 @@ Key fields:
 - `source_project`: Dataiku project containing the source datasets
 - `prompt`: the task the agent sees
 - `sources`: datasets copied into the generated project before the agent runs
-- `source_renames`: optional source dataset renames for cleaner prompts and flows
 - `expected_outputs`: final datasets used by the default `output_datasets` evaluator
 - `evals`: optional evaluator list; if omitted, the harness runs the default `output_datasets` evaluator only
 
@@ -301,6 +303,12 @@ Built-in evaluator names:
 - `recipe_config_match`: compares recipe payload/params for matched recipes in an anonymous flow graph
 - `recipe_type_counts`: checks exact recipe counts by type
 - `forbid_recipe_types`: fails if forbidden recipe types are present
+
+Case validation:
+
+- The harness validates case files before setup starts
+- Base case fields are always required: `name`, `description`, `prompt`, `source_project`, `sources`
+- Each configured evaluator also validates its own spec and fails early with a targeted error if required fields are missing
 
 Anonymous flow graph format:
 
@@ -327,6 +335,7 @@ Custom evaluators:
 
 - Use `module_name:function_name` in `evals[].name`
 - The function should accept `(client, project_key, case, spec)` and return a list of check dicts
+- A custom evaluator can optionally expose a callable `validate_spec(spec, case)` attribute for early validation
 - This lets you add local Python evaluators without changing the harness core
 
 Then run it:

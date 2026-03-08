@@ -109,6 +109,25 @@ def output_datasets(client, project_key, case, spec):
     return checks
 
 
+def validate_output_datasets_spec(spec, case):
+    outputs = spec.get("outputs")
+    if outputs is None:
+        outputs = case.get("expected_outputs")
+    _validate_expected_outputs(outputs, "output_datasets requires outputs or case.expected_outputs")
+
+    sample_mode = spec.get("sample_mode", "unordered")
+    if sample_mode not in {"ordered", "unordered", "by_key"}:
+        raise ValueError("output_datasets sample_mode must be 'ordered', 'unordered', or 'by_key'")
+
+    key_columns = spec.get("key_columns", [])
+    if sample_mode == "by_key":
+        if not isinstance(key_columns, list) or not key_columns:
+            raise ValueError("output_datasets key_columns is required when sample_mode='by_key'")
+        for index, column_name in enumerate(key_columns):
+            if not isinstance(column_name, str) or not column_name.strip():
+                raise ValueError(f"output_datasets key_columns[{index}] must be a non-empty string")
+
+
 def flow_shape_match(client, project_key, case, spec):
     """Validate anonymous flow structure using dataset schemas and recipe connectivity."""
     project_state = _collect_project_state(client, project_key)
@@ -155,6 +174,10 @@ def flow_shape_match(client, project_key, case, spec):
         check["message"] = "No dataset-to-schema mapping satisfied the expected recipe graph"
     checks.append(check)
     return checks
+
+
+def validate_flow_shape_match_spec(spec, case):
+    _validate_flow_spec(spec, require_recipe_config=False)
 
 
 def recipe_config_match(client, project_key, case, spec):
@@ -217,6 +240,17 @@ def recipe_config_match(client, project_key, case, spec):
     return checks
 
 
+def validate_recipe_config_match_spec(spec, case):
+    _validate_flow_spec(spec, require_recipe_config=True)
+
+    mode = spec.get("mode", "raw")
+    compare = spec.get("compare", "subset")
+    if mode not in {"raw", "normalized"}:
+        raise ValueError("recipe_config_match mode must be 'raw' or 'normalized'")
+    if compare not in {"subset", "exact"}:
+        raise ValueError("recipe_config_match compare must be 'subset' or 'exact'")
+
+
 def recipe_type_counts(client, project_key, case, spec):
     """Validate recipe counts by type."""
     expected = spec.get("expected", [])
@@ -238,6 +272,21 @@ def recipe_type_counts(client, project_key, case, spec):
     return checks
 
 
+def validate_recipe_type_counts_spec(spec, case):
+    expected = spec.get("expected")
+    if not isinstance(expected, list) or not expected:
+        raise ValueError("recipe_type_counts requires a non-empty expected list")
+    for index, item in enumerate(expected):
+        if not isinstance(item, dict):
+            raise ValueError(f"recipe_type_counts expected[{index}] must be an object")
+        recipe_type = item.get("type")
+        count = item.get("count")
+        if not isinstance(recipe_type, str) or not recipe_type.strip():
+            raise ValueError(f"recipe_type_counts expected[{index}].type must be a non-empty string")
+        if not isinstance(count, int) or count < 0:
+            raise ValueError(f"recipe_type_counts expected[{index}].count must be a non-negative integer")
+
+
 def forbid_recipe_types(client, project_key, case, spec):
     """Fail when any recipe of a forbidden type is present."""
     forbidden_types = spec.get("types", [])
@@ -255,6 +304,15 @@ def forbid_recipe_types(client, project_key, case, spec):
             "actual": actual_types.get(recipe_type, 0),
         })
     return checks
+
+
+def validate_forbid_recipe_types_spec(spec, case):
+    forbidden_types = spec.get("types")
+    if not isinstance(forbidden_types, list) or not forbidden_types:
+        raise ValueError("forbid_recipe_types requires a non-empty types list")
+    for index, recipe_type in enumerate(forbidden_types):
+        if not isinstance(recipe_type, str) or not recipe_type.strip():
+            raise ValueError(f"forbid_recipe_types types[{index}] must be a non-empty string")
 
 
 def _collect_project_state(client, project_key):
@@ -397,6 +455,85 @@ def _candidate_dataset_names(alias, expected_nodes, actual_datasets):
         for dataset_name, dataset in actual_datasets.items()
         if dataset["schema_signature"] == expected_schema
     ]
+
+
+def _validate_flow_spec(spec, require_recipe_config):
+    nodes = spec.get("nodes")
+    recipes = spec.get("recipes")
+    if not isinstance(nodes, dict) or not nodes:
+        raise ValueError("nodes must be a non-empty object")
+    if not isinstance(recipes, list) or not recipes:
+        raise ValueError("recipes must be a non-empty list")
+
+    for alias, node in nodes.items():
+        if not isinstance(alias, str) or not alias.strip():
+            raise ValueError("node aliases must be non-empty strings")
+        if not isinstance(node, dict):
+            raise ValueError(f"node '{alias}' must be an object")
+        schema = node.get("schema")
+        _validate_schema(schema, f"nodes['{alias}'].schema")
+
+    known_aliases = set(nodes)
+    for index, recipe in enumerate(recipes):
+        if not isinstance(recipe, dict):
+            raise ValueError(f"recipes[{index}] must be an object")
+        recipe_type = recipe.get("type")
+        if not isinstance(recipe_type, str) or not recipe_type.strip():
+            raise ValueError(f"recipes[{index}].type must be a non-empty string")
+        _validate_alias_list(recipe.get("inputs"), known_aliases, f"recipes[{index}].inputs")
+        _validate_alias_list(recipe.get("outputs"), known_aliases, f"recipes[{index}].outputs")
+        if require_recipe_config and "config" not in recipe:
+            raise ValueError(f"recipes[{index}].config is required")
+        if "config" in recipe and not isinstance(recipe["config"], dict):
+            raise ValueError(f"recipes[{index}].config must be an object")
+
+    for field_name in ("exact_recipe_count", "exact_dataset_count"):
+        if field_name in spec and not isinstance(spec[field_name], bool):
+            raise ValueError(f"{field_name} must be a boolean")
+
+
+def _validate_expected_outputs(outputs, missing_message):
+    if not isinstance(outputs, dict) or not outputs:
+        raise ValueError(missing_message)
+    for dataset_name, expected in outputs.items():
+        if not isinstance(dataset_name, str) or not dataset_name.strip():
+            raise ValueError("output dataset names must be non-empty strings")
+        if not isinstance(expected, dict):
+            raise ValueError(f"expected output '{dataset_name}' must be an object")
+        _validate_schema(expected.get("schema"), f"expected_outputs['{dataset_name}'].schema")
+        row_count = expected.get("row_count")
+        if not isinstance(row_count, int) or row_count < 0:
+            raise ValueError(f"expected_outputs['{dataset_name}'].row_count must be a non-negative integer")
+        data = expected.get("data", [])
+        if not isinstance(data, list):
+            raise ValueError(f"expected_outputs['{dataset_name}'].data must be a list")
+        for index, row in enumerate(data):
+            if not isinstance(row, dict):
+                raise ValueError(f"expected_outputs['{dataset_name}'].data[{index}] must be an object")
+
+
+def _validate_schema(schema, label):
+    if not isinstance(schema, list) or not schema:
+        raise ValueError(f"{label} must be a non-empty list")
+    for index, column in enumerate(schema):
+        if not isinstance(column, dict):
+            raise ValueError(f"{label}[{index}] must be an object")
+        name = column.get("name")
+        column_type = column.get("type")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"{label}[{index}].name must be a non-empty string")
+        if not isinstance(column_type, str) or not column_type.strip():
+            raise ValueError(f"{label}[{index}].type must be a non-empty string")
+
+
+def _validate_alias_list(aliases, known_aliases, label):
+    if not isinstance(aliases, list) or not aliases:
+        raise ValueError(f"{label} must be a non-empty list")
+    for index, alias in enumerate(aliases):
+        if not isinstance(alias, str) or not alias.strip():
+            raise ValueError(f"{label}[{index}] must be a non-empty string")
+        if alias not in known_aliases:
+            raise ValueError(f"{label}[{index}] refers to unknown node alias '{alias}'")
 
 
 def _recipe_config(settings, mode):
@@ -632,4 +769,12 @@ BUILTIN_EVALUATORS = {
     "recipe_config_match": recipe_config_match,
     "recipe_type_counts": recipe_type_counts,
     "forbid_recipe_types": forbid_recipe_types,
+}
+
+BUILTIN_EVALUATOR_VALIDATORS = {
+    "output_datasets": validate_output_datasets_spec,
+    "flow_shape_match": validate_flow_shape_match_spec,
+    "recipe_config_match": validate_recipe_config_match_spec,
+    "recipe_type_counts": validate_recipe_type_counts_spec,
+    "forbid_recipe_types": validate_forbid_recipe_types_spec,
 }
