@@ -69,7 +69,8 @@ python run_test.py dates \
 ## Layout
 
 - `cases/*.json`: case definitions
-- `evals/__init__.py`: setup, validate, teardown
+- `evals/__init__.py`: setup, validate, teardown, and evaluator loading
+- `evals/builtins.py`: built-in evaluators you can reuse or copy
 - `agents/*.py`: bundled agent scripts for common CLIs
 - `suite/*.py`: shared protocol, prompt, and report helpers
 - `run_test.py`: main CLI entrypoint
@@ -82,16 +83,14 @@ Each run has three phases.
 2. The harness runs your agent command with a request JSON and waits for a response JSON.
 3. `validate()` inspects the resulting Dataiku project and checks the output datasets.
 
-The validation focuses on final outcomes:
+By default, validation is intentionally minimal and focuses on final output datasets:
 
-- visual recipes should be used when they are sufficient
-- expected recipe types should be present
 - expected output datasets should exist
 - schemas should match
 - row counts should match
 - sampled data values should match
 
-The one hard rule is that Python recipes should not be used when a Dataiku visual recipe would suffice.
+Cases can opt into additional built-in evaluators or custom evaluators if they want to test workflow choices, policy rules, recipe counts, or other project-level behavior.
 
 ## Running A Custom Agent
 
@@ -222,10 +221,6 @@ Example:
   "source_renames": {
     "Ugly_Long_Dataset_Name": "Clean_Name"
   },
-  "expected_recipes": [
-    {"type": "shaker", "inputs": ["Clean_Name"], "output": "intermediate"},
-    {"type": "grouping", "inputs": ["intermediate"], "output": "final_output"}
-  ],
   "expected_outputs": {
     "final_output": {
       "schema": [
@@ -236,7 +231,18 @@ Example:
         {"column_name": "expected_value"}
       ]
     }
-  }
+  },
+  "evals": [
+    {"name": "output_datasets"},
+    {
+      "name": "recipe_type_counts",
+      "expected": [
+        {"type": "shaker", "count": 1},
+        {"type": "grouping", "count": 1}
+      ]
+    },
+    {"name": "forbid_recipe_types", "types": ["python"]}
+  ]
 }
 ```
 
@@ -246,8 +252,20 @@ Key fields:
 - `prompt`: the task the agent sees
 - `sources`: datasets copied into the generated project before the agent runs
 - `source_renames`: optional source dataset renames for cleaner prompts and flows
-- `expected_recipes`: recipe types that should appear, validated by count
-- `expected_outputs`: final datasets to validate for schema, row count, and sampled values
+- `expected_outputs`: final datasets used by the default `output_datasets` evaluator
+- `evals`: optional evaluator list; if omitted, the harness runs the default `output_datasets` evaluator only
+
+Built-in evaluator names:
+
+- `output_datasets`: validates dataset existence, schema, row counts, and sampled values
+- `recipe_type_counts`: checks exact recipe counts by type
+- `forbid_recipe_types`: fails if forbidden recipe types are present
+
+Custom evaluators:
+
+- Use `module_name:function_name` in `evals[].name`
+- The function should accept `(client, project_key, case, spec)` and return a list of check dicts
+- This lets you add local Python evaluators without changing the harness core
 
 Then run it:
 

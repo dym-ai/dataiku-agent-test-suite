@@ -74,8 +74,14 @@ def _first_failure(validation_result):
 
 def _format_check(check):
     name = check["check"]
+    if name == "agent_returncode":
+        return f"agent_returncode(expected {check['expected']}, actual {check['actual']})"
+    if name == "agent_status":
+        return f"agent_status(expected {check['expected']}, actual {check['actual']})"
     if name == "recipe_type_count":
         return f"recipe_type_count({check['recipe_type']} {check['expected']}, actual {check['actual']})"
+    if name == "forbidden_recipe_type":
+        return f"forbidden_recipe_type({check['recipe_type']}, expected {check['expected']}, actual {check['actual']})"
     if "dataset" in check:
         if name == "row_count":
             return f"row_count({check['dataset']}, expected {check['expected']}, actual {check['actual']})"
@@ -89,8 +95,6 @@ def _format_check(check):
             return f"exists({check['dataset']})"
         if name == "data_readable":
             return f"data_readable({check['dataset']})"
-    if name == "no_python_recipes" and check.get("message"):
-        return f"{name} ({check['message']})"
     return name
 
 

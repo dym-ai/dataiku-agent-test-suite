@@ -7,13 +7,6 @@
     "Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge": "Crane_Data"
   },
   "sources": ["Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge"],
-  "expected_recipes": [
-    {"type": "shaker", "inputs": ["Crane_Data"], "output": "crane_tiny_tim"},
-    {"type": "shaker", "inputs": ["Crane_Data"], "output": "crane_maximus"},
-    {"type": "join", "inputs": ["crane_tiny_tim", "crane_maximus"], "output": "crane_lease_pairs"},
-    {"type": "shaker", "inputs": ["crane_lease_pairs"], "output": "crane_overlap_days"},
-    {"type": "grouping", "inputs": ["crane_overlap_days"], "output": "crane_total_overlap"}
-  ],
   "expected_outputs": {
     "crane_total_overlap": {
       "schema": [

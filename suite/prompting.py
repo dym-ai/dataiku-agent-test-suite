@@ -11,8 +11,6 @@ def build_agent_prompt(request):
             "Build and verify the required output dataset before finishing. "
             "Use the case prompt and the runtime behavior as the source of truth for task "
             "requirements. "
-            "Prefer Dataiku visual recipes when possible and avoid Python recipes unless a visual "
-            "recipe is impossible for the task. "
             "If you use Dataiku tooling that requires authentication, read the API key from the "
             "DATAIKU_API_KEY environment variable.",
         ]

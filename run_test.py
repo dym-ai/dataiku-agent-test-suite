@@ -58,6 +58,33 @@ def _build_project_url(base_url, project_key):
     return f"{base_url.rstrip('/')}/projects/{project_key}/"
 
 
+def _apply_agent_outcome_checks(validation_result, agent_result):
+    checks = list(validation_result["checks"])
+
+    returncode = agent_result.get("agent_returncode")
+    if returncode is not None:
+        checks.insert(0, {
+            "check": "agent_returncode",
+            "passed": returncode == 0,
+            "expected": 0,
+            "actual": returncode,
+        })
+
+    status = agent_result.get("status")
+    if status is not None:
+        checks.insert(1 if returncode is not None else 0, {
+            "check": "agent_status",
+            "passed": status == "completed",
+            "expected": "completed",
+            "actual": status,
+        })
+
+    result = dict(validation_result)
+    result["checks"] = checks
+    result["passed"] = all(check["passed"] for check in checks)
+    return result
+
+
 def _write_artifacts(artifacts_root, project_key, request, agent_result, validation_result, report_text):
     artifact_dir = artifacts_root / project_key
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -96,6 +123,7 @@ def run(case_name, agent_name, keep=False, workspace=None, verbose=False, artifa
 
         print(f"\n--- Validating...")
         result = validate(client, case_name, case["project_key"], agent_stats=agent_result.get("stats"))
+        result = _apply_agent_outcome_checks(result, agent_result)
         artifact_path = None
         report_text = format_report(
             case_name,
