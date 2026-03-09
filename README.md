@@ -17,12 +17,14 @@ To run a case successfully, this README assumes:
 
 - You already have a compatible agent CLI installed and working.
 - You have a running Dataiku DSS instance.
-- The source project referenced by the case exists on that instance.
-- The source datasets in that project already contain data.
 - You have Python with `dataikuapi` installed.
 - You have exported `DATAIKU_URL` and `DATAIKU_API_KEY`.
 - Your Dataiku API key can create and delete projects.
+- By default, local `input_data` is uploaded using the DSS connection `filesystem_managed`.
+- Built-in cases use local input data CSVs and do not require a pre-existing DSS source project.
+- Custom cases can still copy from an existing DSS `source_project` if you prefer that mode.
 - Optional: set `DATAIKU_SSL_VERIFY=true|false|/path/to/ca-bundle.pem` if you need explicit TLS verification control.
+- Optional: set `DATAIKU_INPUT_DATA_CONNECTION` if you need local `input_data` uploaded to a different DSS connection.
 
 ## Quick Start
 
@@ -69,7 +71,8 @@ python run_test.py dates \
 
 ## Layout
 
-- `cases/*.json`: case definitions
+- `cases/<case_name>/case.json`: case definition
+- `cases/<case_name>/input_data/*`: local input datasets for that case
 - `evals/__init__.py`: setup, validate, teardown, and evaluator loading
 - `evals/builtins.py`: built-in evaluators you can reuse or copy
 - `agents/*.py`: bundled agent scripts for common CLIs
@@ -80,7 +83,7 @@ python run_test.py dates \
 
 Each run has three phases.
 
-1. `setup()` creates a clean Dataiku project and copies the source datasets listed by the case.
+1. `setup()` creates a clean Dataiku project and prepares the source datasets listed by the case.
 2. The harness runs your agent command with a request JSON and waits for a response JSON.
 3. `validate()` inspects the resulting Dataiku project and checks the output datasets.
 
@@ -145,7 +148,7 @@ The request JSON currently looks like this:
 {
   "version": 1,
   "case_name": "dates",
-  "project_key": "DATAIKU_EVAL_DATES_1772835245",
+  "project_key": "BOBTEST_DATES_1772835245_AB12CD34",
   "prompt": "The natural language task...",
   "sources": ["Dates"],
   "workspace": "/path/to/agent/workspace"
@@ -216,7 +219,7 @@ Use `--artifacts-dir` if you want the full run bundle written to disk. For each 
 
 ## Adding A New Case
 
-Create a new JSON file in `cases/`.
+Create a new case directory in `cases/` with a `case.json` file.
 
 Example:
 
@@ -225,8 +228,12 @@ Example:
   "name": "my_case",
   "description": "What this case validates.",
   "prompt": "The natural language task to give the agent...",
-  "source_project": "MY_PROJECT",
   "sources": ["Source_Dataset_Name"],
+  "input_data": {
+    "Source_Dataset_Name": {
+      "path": "input_data/Source_Dataset_Name.csv"
+    }
+  },
   "expected_outputs": {
     "final_output": {
       "schema": [
@@ -293,9 +300,11 @@ Example:
 
 Key fields:
 
-- `source_project`: Dataiku project containing the source datasets
+- `input_data`: optional map of source dataset names to local input data files stored with the case
+  Paths are resolved relative to the case file directory.
+- `source_project`: optional Dataiku project containing source datasets to copy from when input data is not provided
 - `prompt`: the task the agent sees
-- `sources`: datasets copied into the generated project before the agent runs
+- `sources`: datasets created or copied into the generated project before the agent runs
 - `expected_outputs`: final datasets used by the default `output_datasets` evaluator
 - `evals`: optional evaluator list; if omitted, the harness runs the default `output_datasets` evaluator only
 
@@ -310,7 +319,8 @@ Built-in evaluator names:
 Case validation:
 
 - The harness validates case files before setup starts
-- Base case fields are always required: `name`, `description`, `prompt`, `source_project`, `sources`
+- Base case fields are always required: `name`, `description`, `prompt`, `sources`
+- Each source dataset must be backed by either an `input_data` entry or a `source_project`
 - Each configured evaluator also validates its own spec and fails early with a targeted error if required fields are missing
 
 Anonymous flow graph format:

@@ -2,8 +2,12 @@
   "name": "dates",
   "description": "Parse dates and compute end-of-month expiration dates.",
   "prompt": "I have a dataset called 'Dates' with a single column 'Date' containing dates as strings in M/d/yy format (e.g. '8/27/23'). Create a pipeline that:\n1. Parses the date string into a proper date column called 'Date_parsed'\n2. Computes an 'Expiration_Date' column that is the last day of the month for each date\n\nThe output dataset should be called 'Dates_with_expiration'.",
-  "source_project": "BOBCHALLENGE",
   "sources": ["Dates"],
+  "input_data": {
+    "Dates": {
+      "path": "input_data/Dates.csv"
+    }
+  },
   "expected_outputs": {
     "Dates_with_expiration": {
       "schema": [

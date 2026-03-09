@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -14,7 +15,6 @@ REQUIRED_CASE_FIELDS = {
     "name": str,
     "description": str,
     "prompt": str,
-    "source_project": str,
 }
 
 
@@ -23,7 +23,11 @@ class CaseValidationError(ValueError):
 
 
 def _load_case(name):
-    path = CASES_DIR / f"{name}.json"
+    path = _resolve_case_path(name)
+    return _load_case_from_path(path)
+
+
+def _load_case_from_path(path):
     with open(path) as f:
         case = json.load(f)
     _validate_case(case, path)
@@ -31,15 +35,18 @@ def _load_case(name):
 
 
 def setup(client, case_name):
-    """Create a clean project and copy source datasets from a case source project.
+    """Create a clean project and prepare source datasets for a case.
 
     Returns dict with:
         - project_key: the new project key
         - prompt: the natural language task to give the agent
-        - sources: list of source dataset names copied
+        - sources: list of source dataset names prepared in the project
     """
-    case = _load_case(case_name)
-    source_project = client.get_project(case["source_project"])
+    case_path = _resolve_case_path(case_name)
+    case = _load_case_from_path(case_path)
+    input_data = _input_data_specs(case, case_path)
+    source_project_name = case.get("source_project")
+    source_project = client.get_project(source_project_name) if source_project_name else None
 
     project_key = _build_project_key(case_name)
     auth_info = client.get_auth_info()
@@ -53,17 +60,15 @@ def setup(client, case_name):
 
         copied_names = []
         for ds_name in case["sources"]:
-            source_ds = source_project.get_dataset(ds_name)
-            target_name = ds_name
-
-            builder = test_project.new_managed_dataset(target_name)
-            builder.with_store_into("filesystem_managed")
-            builder.create()
-
-            target_ds = test_project.get_dataset(target_name)
-            future = source_ds.copy_to(target_ds, sync_schema=True)
-            future.wait_for_result()
-            copied_names.append(target_name)
+            input_spec = input_data.get(ds_name)
+            if input_spec is not None:
+                _create_uploaded_dataset_from_input_data(test_project, ds_name, input_spec)
+            else:
+                source_ds = source_project.get_dataset(ds_name)
+                target_ds = _create_managed_source_dataset(test_project, ds_name)
+                future = source_ds.copy_to(target_ds, sync_schema=True)
+                future.wait_for_result()
+            copied_names.append(ds_name)
     except Exception:
         if created_project:
             _delete_project_quietly(client, project_key)
@@ -120,6 +125,21 @@ def _validate_case(case, path):
         if not isinstance(source_name, str) or not source_name.strip():
             raise CaseValidationError(f"{path}: sources[{index}] must be a non-empty string")
 
+    source_project_name = case.get("source_project")
+    if source_project_name is not None:
+        if not isinstance(source_project_name, str) or not source_project_name.strip():
+            raise CaseValidationError(f"{path}: field 'source_project' must be a non-empty string when provided")
+
+    input_data = _input_data_specs(case, path)
+    if not source_project_name and not input_data:
+        raise CaseValidationError(f"{path}: define 'source_project', 'input_data', or both")
+
+    for source_name in sources:
+        if source_name not in input_data and not source_project_name:
+            raise CaseValidationError(
+                f"{path}: source '{source_name}' requires either 'source_project' or a matching input_data entry"
+            )
+
     eval_specs = case.get("evals") or DEFAULT_EVALS
     if not isinstance(eval_specs, list) or not eval_specs:
         raise CaseValidationError(f"{path}: field 'evals' must be a non-empty list when provided")
@@ -160,6 +180,64 @@ def _delete_project_quietly(client, project_key):
         client.get_project(project_key).delete()
     except Exception:
         pass
+
+
+def _resolve_case_path(name):
+    preferred_path = CASES_DIR / name / "case.json"
+    if preferred_path.is_file():
+        return preferred_path
+
+    legacy_path = CASES_DIR / f"{name}.json"
+    if legacy_path.is_file():
+        return legacy_path
+
+    raise FileNotFoundError(f"Case '{name}' was not found under {CASES_DIR}")
+
+
+def _input_data_specs(case, case_path):
+    raw_specs = case.get("input_data") or {}
+    if not isinstance(raw_specs, dict):
+        raise CaseValidationError("field 'input_data' must be an object when provided")
+
+    specs = {}
+    for dataset_name, spec in raw_specs.items():
+        if not isinstance(dataset_name, str) or not dataset_name.strip():
+            raise CaseValidationError("input_data keys must be non-empty dataset names")
+        if not isinstance(spec, dict):
+            raise CaseValidationError(f"input_data.{dataset_name} must be an object")
+
+        path_value = spec.get("path")
+        if not isinstance(path_value, str) or not path_value.strip():
+            raise CaseValidationError(f"input_data.{dataset_name}.path must be a non-empty string")
+
+        resolved_path = (case_path.parent / path_value).resolve()
+        if not resolved_path.is_file():
+            raise CaseValidationError(f"input_data.{dataset_name}.path does not exist: {resolved_path}")
+
+        specs[dataset_name] = {
+            "path": resolved_path,
+        }
+    return specs
+
+
+def _create_managed_source_dataset(project, dataset_name):
+    builder = project.new_managed_dataset(dataset_name)
+    builder.with_store_into("filesystem_managed")
+    builder.create()
+    return project.get_dataset(dataset_name)
+
+
+def _create_uploaded_dataset_from_input_data(project, dataset_name, input_spec):
+    dataset = project.create_upload_dataset(dataset_name, connection=_input_data_connection())
+    input_path = input_spec["path"]
+    with input_path.open("rb") as handle:
+        dataset.uploaded_add_file(handle, input_path.name)
+    settings = dataset.autodetect_settings()
+    settings.save()
+
+
+def _input_data_connection():
+    return os.environ.get("DATAIKU_INPUT_DATA_CONNECTION", "filesystem_managed")
 
 
 def _resolve_evaluator(name):
