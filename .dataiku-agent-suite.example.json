@@ -1,0 +1,8 @@
+{
+  "agent_command": "codex",
+  "workspace": ".",
+  "artifacts_dir": "./artifacts",
+  "agent_timeout_seconds": 900,
+  "keep": false,
+  "verbose": false
+}
