@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -227,12 +228,16 @@ def _create_managed_source_dataset(project, dataset_name):
 
 
 def _create_uploaded_dataset_from_input_data(project, dataset_name, input_spec):
-    dataset = project.create_upload_dataset(dataset_name)
+    dataset = project.create_upload_dataset(dataset_name, connection=_input_data_connection())
     input_path = input_spec["path"]
     with input_path.open("rb") as handle:
         dataset.uploaded_add_file(handle, input_path.name)
     settings = dataset.autodetect_settings()
     settings.save()
+
+
+def _input_data_connection():
+    return os.environ.get("DATAIKU_INPUT_DATA_CONNECTION", "filesystem_managed")
 
 
 def _resolve_evaluator(name):
