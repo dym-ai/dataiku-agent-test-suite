@@ -27,6 +27,30 @@ def _load_case(name):
     return _load_case_from_path(path)
 
 
+def list_cases():
+    """Return validated case summaries in display order."""
+    cases = []
+    for name, path in _iter_case_paths():
+        case = _load_case_from_path(path)
+        cases.append({
+            "name": name,
+            "path": path,
+            "description": case["description"],
+        })
+    return cases
+
+
+def describe_case(name):
+    """Return a validated case definition and its resolved path."""
+    path = _resolve_case_path(name)
+    case = _load_case_from_path(path)
+    return {
+        "name": name,
+        "path": path,
+        "case": case,
+    }
+
+
 def _load_case_from_path(path):
     with open(path) as f:
         case = json.load(f)
@@ -183,15 +207,26 @@ def _delete_project_quietly(client, project_key):
 
 
 def _resolve_case_path(name):
-    preferred_path = CASES_DIR / name / "case.json"
-    if preferred_path.is_file():
-        return preferred_path
-
-    legacy_path = CASES_DIR / f"{name}.json"
-    if legacy_path.is_file():
-        return legacy_path
+    case_paths = dict(_iter_case_paths())
+    path = case_paths.get(name)
+    if path is not None:
+        return path
 
     raise FileNotFoundError(f"Case '{name}' was not found under {CASES_DIR}")
+
+
+def _iter_case_paths():
+    case_paths = {}
+
+    for legacy_path in sorted(CASES_DIR.glob("*.json")):
+        case_paths.setdefault(legacy_path.stem, legacy_path)
+
+    for case_dir in sorted(CASES_DIR.iterdir()):
+        case_path = case_dir / "case.json"
+        if case_dir.is_dir() and case_path.is_file():
+            case_paths[case_dir.name] = case_path
+
+    return sorted(case_paths.items())
 
 
 def _input_data_specs(case, case_path):

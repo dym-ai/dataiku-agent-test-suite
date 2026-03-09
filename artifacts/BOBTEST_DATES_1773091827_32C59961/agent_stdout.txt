@@ -1,0 +1,3 @@
+Created a Python recipe `build_dates_with_expiration` in project `BOBTEST_DATES_1773091827_32C59961` and built `Dates_with_expiration`. The flow parses the source strings into `Date_parsed` and computes `Expiration_Date` as the last day of each month.
+
+Verification against the repo’s source of truth in [cases/dates/case.json](/Users/dmitriryssev/Documents/GitHub/dataiku-agent-test-suite/cases/dates/case.json) passed: dataset exists, schema matches, row count is `1016`, and sample values match expected output.

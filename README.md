@@ -4,7 +4,7 @@ This repository lets you test whether an AI agent can complete a Dataiku task su
 
 You give the harness a test case and an agent command. It creates a fresh Dataiku project, gives the task to the agent, and checks whether the final result matches the case.
 
-The agent being tested does not need to live in this repo. It can be Codex, Claude Code, or any other command-line agent that can read a request file and write a response file.
+Your agent does not need to live in this repository. It can be Codex, Claude Code, another CLI agent, or your own wrapper script, as long as it can take a task from the harness and return a result.
 
 ## What This Repo Does
 
@@ -73,11 +73,44 @@ The basic command is:
 python run_test.py <case_name> --agent "<agent command>"
 ```
 
+If you prefer not to repeat the same flags every time, you can start from [`.dataiku-agent-suite.example.json`](.dataiku-agent-suite.example.json), create a local `.dataiku-agent-suite.json`, and then run:
+
+```bash
+python run_test.py <case_name>
+```
+
 Example with the built-in `dates` case and the bundled Codex wrapper:
 
 ```bash
 python run_test.py dates --agent codex
 ```
+
+Example config:
+
+```json
+{
+  "agent_command": "codex",
+  "workspace": ".",
+  "artifacts_dir": "./artifacts",
+  "agent_timeout_seconds": 900
+}
+```
+
+With `.dataiku-agent-suite.json` in the repository root, the command becomes:
+
+```bash
+python run_test.py dates
+```
+
+`agent_command` can point to the bundled shortcuts (`codex`, `claude`) or to your own command, such as:
+
+```json
+{
+  "agent_command": "python /path/to/my_agent.py"
+}
+```
+
+Command-line flags still override config values when you need a one-off change.
 
 Common add-ons:
 
@@ -114,10 +147,17 @@ Show agent stdout/stderr excerpts in the terminal report:
 python run_test.py dates --agent codex --verbose
 ```
 
-Use a custom agent script:
+Use a custom agent script or wrapper:
 
 ```bash
 python run_test.py dates --agent "python /path/to/my_agent.py"
+```
+
+See what is available before you run anything:
+
+```bash
+python run_test.py --list-cases
+python run_test.py --describe-case dates
 ```
 
 ## How A Run Works
@@ -167,10 +207,12 @@ If `--keep` is also set, the report includes the DSS project URL.
 
 Supported flags:
 
-- `--agent`: required; either `codex`, `claude`, or a custom command string
-- `--keep`: keep the generated DSS project after validation
-- `--workspace`: folder path to include in the agent request; defaults to the current directory
-- `--verbose`: include agent stdout and stderr excerpts in the terminal report
+- `--list-cases`: show available cases and exit
+- `--describe-case`: show the details of one case and exit
+- `--agent`: agent command to run; optional when `agent_command` is set in `.dataiku-agent-suite.json`
+- `--keep` / `--no-keep`: keep or discard the generated DSS project after validation
+- `--workspace`: folder path to include in the agent request; defaults to config or the current directory
+- `--verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
 - `--artifacts-dir`: write request/response/report files to disk
 - `--agent-timeout-seconds`: abort the agent process after a timeout; default `900`
 
