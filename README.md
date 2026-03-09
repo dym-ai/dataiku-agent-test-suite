@@ -69,8 +69,8 @@ python run_test.py dates \
 
 ## Layout
 
-- `cases/*.json`: case definitions
-- `fixtures/*`: local input datasets for self-contained cases
+- `cases/<case_name>/case.json`: case definition
+- `cases/<case_name>/fixtures/*`: local input datasets for that case
 - `evals/__init__.py`: setup, validate, teardown, and evaluator loading
 - `evals/builtins.py`: built-in evaluators you can reuse or copy
 - `agents/*.py`: bundled agent scripts for common CLIs
@@ -217,7 +217,7 @@ Use `--artifacts-dir` if you want the full run bundle written to disk. For each 
 
 ## Adding A New Case
 
-Create a new JSON file in `cases/`.
+Create a new case directory in `cases/` with a `case.json` file.
 
 Example:
 
@@ -229,7 +229,7 @@ Example:
   "sources": ["Source_Dataset_Name"],
   "source_fixtures": {
     "Source_Dataset_Name": {
-      "path": "fixtures/my_case/Source_Dataset_Name.csv"
+      "path": "fixtures/Source_Dataset_Name.csv"
     }
   },
   "expected_outputs": {
@@ -299,7 +299,7 @@ Example:
 Key fields:
 
 - `source_fixtures`: optional map of source dataset names to local fixture files stored in the repo
-  Paths are resolved relative to the repository root.
+  Paths are resolved relative to the case file directory.
 - `source_project`: optional Dataiku project containing source datasets to copy from when a fixture is not provided
 - `prompt`: the task the agent sees
 - `sources`: datasets created or copied into the generated project before the agent runs
