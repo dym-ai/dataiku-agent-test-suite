@@ -20,9 +20,11 @@ To run a case successfully, this README assumes:
 - You have Python with `dataikuapi` installed.
 - You have exported `DATAIKU_URL` and `DATAIKU_API_KEY`.
 - Your Dataiku API key can create and delete projects.
+- By default, local `input_data` is uploaded using the DSS connection `filesystem_managed`.
 - Built-in cases use local input data CSVs and do not require a pre-existing DSS source project.
 - Custom cases can still copy from an existing DSS `source_project` if you prefer that mode.
 - Optional: set `DATAIKU_SSL_VERIFY=true|false|/path/to/ca-bundle.pem` if you need explicit TLS verification control.
+- Optional: set `DATAIKU_INPUT_DATA_CONNECTION` if you need local `input_data` uploaded to a different DSS connection.
 
 ## Quick Start
 
