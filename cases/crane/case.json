@@ -5,7 +5,7 @@
   "sources": ["Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge"],
   "source_fixtures": {
     "Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge": {
-      "path": "fixtures/crane/Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge.csv"
+      "path": "fixtures/Crane_Leasing_Days_Calculation_Challenge___Crane_Leasing_Days_Calculation_Challenge.csv"
     }
   },
   "expected_outputs": {

@@ -8,7 +8,6 @@ from pathlib import Path
 
 from .builtins import BUILTIN_EVALUATORS, BUILTIN_EVALUATOR_VALIDATORS
 
-REPO_ROOT = Path(__file__).parent.parent
 CASES_DIR = Path(__file__).parent.parent / "cases"
 DEFAULT_EVALS = [{"name": "output_datasets"}]
 REQUIRED_CASE_FIELDS = {
@@ -23,7 +22,11 @@ class CaseValidationError(ValueError):
 
 
 def _load_case(name):
-    path = CASES_DIR / f"{name}.json"
+    path = _resolve_case_path(name)
+    return _load_case_from_path(path)
+
+
+def _load_case_from_path(path):
     with open(path) as f:
         case = json.load(f)
     _validate_case(case, path)
@@ -38,8 +41,9 @@ def setup(client, case_name):
         - prompt: the natural language task to give the agent
         - sources: list of source dataset names prepared in the project
     """
-    case = _load_case(case_name)
-    source_fixtures = _source_fixture_specs(case)
+    case_path = _resolve_case_path(case_name)
+    case = _load_case_from_path(case_path)
+    source_fixtures = _source_fixture_specs(case, case_path)
     source_project_name = case.get("source_project")
     source_project = client.get_project(source_project_name) if source_project_name else None
 
@@ -125,7 +129,7 @@ def _validate_case(case, path):
         if not isinstance(source_project_name, str) or not source_project_name.strip():
             raise CaseValidationError(f"{path}: field 'source_project' must be a non-empty string when provided")
 
-    source_fixtures = _source_fixture_specs(case)
+    source_fixtures = _source_fixture_specs(case, path)
     if not source_project_name and not source_fixtures:
         raise CaseValidationError(f"{path}: define 'source_project', 'source_fixtures', or both")
 
@@ -177,7 +181,19 @@ def _delete_project_quietly(client, project_key):
         pass
 
 
-def _source_fixture_specs(case):
+def _resolve_case_path(name):
+    preferred_path = CASES_DIR / name / "case.json"
+    if preferred_path.is_file():
+        return preferred_path
+
+    legacy_path = CASES_DIR / f"{name}.json"
+    if legacy_path.is_file():
+        return legacy_path
+
+    raise FileNotFoundError(f"Case '{name}' was not found under {CASES_DIR}")
+
+
+def _source_fixture_specs(case, case_path):
     raw_specs = case.get("source_fixtures") or {}
     if not isinstance(raw_specs, dict):
         raise CaseValidationError("field 'source_fixtures' must be an object when provided")
@@ -193,7 +209,7 @@ def _source_fixture_specs(case):
         if not isinstance(path_value, str) or not path_value.strip():
             raise CaseValidationError(f"source_fixtures.{dataset_name}.path must be a non-empty string")
 
-        resolved_path = (REPO_ROOT / path_value).resolve()
+        resolved_path = (case_path.parent / path_value).resolve()
         if not resolved_path.is_file():
             raise CaseValidationError(f"source_fixtures.{dataset_name}.path does not exist: {resolved_path}")
 

@@ -5,7 +5,7 @@
   "sources": ["Dates"],
   "source_fixtures": {
     "Dates": {
-      "path": "fixtures/dates/Dates.csv"
+      "path": "fixtures/Dates.csv"
     }
   },
   "expected_outputs": {
