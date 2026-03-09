@@ -32,7 +32,21 @@ Bundled wrappers:
 - `agents/codex.py`
 - `agents/claude.py`
 
-Those wrappers work if the underlying `codex` or `claude` CLI is already installed.
+Those wrappers are convenience adapters. They work if the underlying `codex` or `claude` CLI is already installed.
+
+You can also use your own command instead of the bundled wrappers, for example:
+
+```bash
+python run_test.py dates --agent "python /path/to/my_agent.py"
+```
+
+or a repo-local config like:
+
+```json
+{
+  "agent_command": "python /path/to/my_agent.py"
+}
+```
 
 ## Request JSON
 
