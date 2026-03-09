@@ -1,10 +1,53 @@
 # Dataiku Agent Test Suite
 
-This repository is a CLI-first harness for testing whether an external agent can complete a Dataiku task correctly.
+This repository lets you test whether an AI agent can complete a Dataiku task successfully.
 
-For each run, the harness creates a fresh DSS project, copies in the case's source datasets, runs your agent through a small request/response protocol, and evaluates the resulting project.
+You give the harness a test case and an agent command. It creates a fresh Dataiku project, gives the task to the agent, and checks whether the final result matches the case.
 
-The agent being tested does not need to live in this repo. It can be Codex, Claude Code, or any other CLI-driven system that can read a request file and write a response file.
+The agent being tested does not need to live in this repo. It can be Codex, Claude Code, or any other command-line agent that can read a request file and write a response file.
+
+## What This Repo Does
+
+For each run, the harness:
+
+1. Creates a new temporary project in Dataiku DSS.
+2. Copies in the source datasets needed for the test case.
+3. Runs your agent on the task.
+4. Checks the finished project against the case definition.
+
+If the checks pass, the run passes. If they fail, the report shows what did not match.
+
+### What You Get Back
+
+A typical successful run gives you a short terminal report with:
+
+- **Case information**: the case name and generated Dataiku project
+- **Agent outcome**: whether the agent finished successfully
+- **Pass/fail result**: whether the run passed overall
+- **Check results**: which validations passed or failed
+- **Agent summary**: a short human-readable summary from the agent
+
+If you use `--artifacts-dir`, the harness also writes the full request, agent response, validation result, and report to disk for later inspection.
+
+<details>
+<summary>Example terminal report</summary>
+
+```text
+Case: dates
+Project: BOBTEST_DATES_1772835245_A1B2C3D4
+Agent: completed
+Result: PASS
+
+Checks
+- agent_returncode(expected 0, actual 0): PASS
+- agent_status(expected completed, actual completed): PASS
+- exists(Dates_with_expiration): PASS
+- schema_columns(Dates_with_expiration): PASS
+- schema_types(Dates_with_expiration): PASS
+- row_count(Dates_with_expiration, expected 1016, actual 1016): PASS
+```
+
+</details>
 
 ## Prerequisites
 
@@ -24,7 +67,7 @@ Optional:
 
 ## Quick Start
 
-Command shape:
+The basic command is:
 
 ```bash
 python run_test.py <case_name> --agent "<agent command>"
@@ -38,10 +81,10 @@ python run_test.py dates --agent codex
 
 Common add-ons:
 
-- `--keep` to retain the generated DSS project for inspection
-- `--verbose` to include stdout/stderr excerpts in the report
+- `--keep` to keep the generated DSS project so you can inspect it
+- `--verbose` to show agent stdout and stderr excerpts in the report
 - `--artifacts-dir /path/to/output-artifacts` to write the full run bundle to disk
-- `--workspace /path/to/agent-workspace` to tell the agent which local workspace it may use
+- `--workspace /path/to/agent-workspace` to tell the agent which local folder it may use
 
 Keep the generated DSS project after validation:
 
@@ -81,20 +124,20 @@ python run_test.py dates --agent "python /path/to/my_agent.py"
 
 Each run has three stages:
 
-1. `setup()` validates the case, creates a new DSS project, and copies the source datasets into it.
+1. `setup()` checks the case definition, creates a new DSS project, and copies the source datasets into it.
 2. The harness runs your agent command with `--request <path>` and `--response <path>`.
-3. `validate()` runs the case's evaluator list against the finished DSS project.
+3. `validate()` checks the finished DSS project against the case's validation rules.
 
 If `--keep` is not set, the harness deletes the generated project at the end.
 
-By default, a case uses the `output_datasets` evaluator only. That default path is intentionally minimal and focused on final outputs:
+By default, the harness keeps validation simple and focuses on the final output datasets:
 
 - required output datasets exist
 - schemas match
 - row counts match
 - sampled values match
 
-Cases can opt into stricter or more opinionated evaluators when they want to judge flow shape, recipe counts, or recipe configuration.
+Cases can also use stricter checks when you want to judge the flow shape, recipe counts, or recipe configuration.
 
 ## Reports And Artifacts
 
@@ -126,8 +169,8 @@ Supported flags:
 
 - `--agent`: required; either `codex`, `claude`, or a custom command string
 - `--keep`: keep the generated DSS project after validation
-- `--workspace`: path to include in the agent request JSON; defaults to the current directory
-- `--verbose`: include agent stdout/stderr excerpts in the terminal report
+- `--workspace`: folder path to include in the agent request; defaults to the current directory
+- `--verbose`: include agent stdout and stderr excerpts in the terminal report
 - `--artifacts-dir`: write request/response/report files to disk
 - `--agent-timeout-seconds`: abort the agent process after a timeout; default `900`
 
@@ -135,8 +178,8 @@ Supported flags:
 
 Deeper reference material lives here:
 
-- [`docs/agent-contract.md`](docs/agent-contract.md): request/response protocol, custom agent expectations, bundled wrappers
-- [`docs/cases-and-evaluators.md`](docs/cases-and-evaluators.md): case format, built-in evaluators, and custom evaluator hooks
+- [`docs/agent-contract.md`](docs/agent-contract.md): how the harness talks to agents, plus the bundled wrappers
+- [`docs/cases-and-evaluators.md`](docs/cases-and-evaluators.md): how to write cases and how the built-in checks work
 
 ## Repository Layout
 
