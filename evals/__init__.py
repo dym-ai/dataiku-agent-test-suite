@@ -43,7 +43,7 @@ def setup(client, case_name):
     """
     case_path = _resolve_case_path(case_name)
     case = _load_case_from_path(case_path)
-    source_fixtures = _source_fixture_specs(case, case_path)
+    input_data = _input_data_specs(case, case_path)
     source_project_name = case.get("source_project")
     source_project = client.get_project(source_project_name) if source_project_name else None
 
@@ -59,9 +59,9 @@ def setup(client, case_name):
 
         copied_names = []
         for ds_name in case["sources"]:
-            fixture_spec = source_fixtures.get(ds_name)
-            if fixture_spec is not None:
-                _create_uploaded_dataset_from_fixture(test_project, ds_name, fixture_spec)
+            input_spec = input_data.get(ds_name)
+            if input_spec is not None:
+                _create_uploaded_dataset_from_input_data(test_project, ds_name, input_spec)
             else:
                 source_ds = source_project.get_dataset(ds_name)
                 target_ds = _create_managed_source_dataset(test_project, ds_name)
@@ -129,14 +129,14 @@ def _validate_case(case, path):
         if not isinstance(source_project_name, str) or not source_project_name.strip():
             raise CaseValidationError(f"{path}: field 'source_project' must be a non-empty string when provided")
 
-    source_fixtures = _source_fixture_specs(case, path)
-    if not source_project_name and not source_fixtures:
-        raise CaseValidationError(f"{path}: define 'source_project', 'source_fixtures', or both")
+    input_data = _input_data_specs(case, path)
+    if not source_project_name and not input_data:
+        raise CaseValidationError(f"{path}: define 'source_project', 'input_data', or both")
 
     for source_name in sources:
-        if source_name not in source_fixtures and not source_project_name:
+        if source_name not in input_data and not source_project_name:
             raise CaseValidationError(
-                f"{path}: source '{source_name}' requires either 'source_project' or a matching source_fixtures entry"
+                f"{path}: source '{source_name}' requires either 'source_project' or a matching input_data entry"
             )
 
     eval_specs = case.get("evals") or DEFAULT_EVALS
@@ -193,25 +193,25 @@ def _resolve_case_path(name):
     raise FileNotFoundError(f"Case '{name}' was not found under {CASES_DIR}")
 
 
-def _source_fixture_specs(case, case_path):
-    raw_specs = case.get("source_fixtures") or {}
+def _input_data_specs(case, case_path):
+    raw_specs = case.get("input_data") or {}
     if not isinstance(raw_specs, dict):
-        raise CaseValidationError("field 'source_fixtures' must be an object when provided")
+        raise CaseValidationError("field 'input_data' must be an object when provided")
 
     specs = {}
     for dataset_name, spec in raw_specs.items():
         if not isinstance(dataset_name, str) or not dataset_name.strip():
-            raise CaseValidationError("source_fixtures keys must be non-empty dataset names")
+            raise CaseValidationError("input_data keys must be non-empty dataset names")
         if not isinstance(spec, dict):
-            raise CaseValidationError(f"source_fixtures.{dataset_name} must be an object")
+            raise CaseValidationError(f"input_data.{dataset_name} must be an object")
 
         path_value = spec.get("path")
         if not isinstance(path_value, str) or not path_value.strip():
-            raise CaseValidationError(f"source_fixtures.{dataset_name}.path must be a non-empty string")
+            raise CaseValidationError(f"input_data.{dataset_name}.path must be a non-empty string")
 
         resolved_path = (case_path.parent / path_value).resolve()
         if not resolved_path.is_file():
-            raise CaseValidationError(f"source_fixtures.{dataset_name}.path does not exist: {resolved_path}")
+            raise CaseValidationError(f"input_data.{dataset_name}.path does not exist: {resolved_path}")
 
         specs[dataset_name] = {
             "path": resolved_path,
@@ -226,11 +226,11 @@ def _create_managed_source_dataset(project, dataset_name):
     return project.get_dataset(dataset_name)
 
 
-def _create_uploaded_dataset_from_fixture(project, dataset_name, fixture_spec):
+def _create_uploaded_dataset_from_input_data(project, dataset_name, input_spec):
     dataset = project.create_upload_dataset(dataset_name)
-    fixture_path = fixture_spec["path"]
-    with fixture_path.open("rb") as handle:
-        dataset.uploaded_add_file(handle, fixture_path.name)
+    input_path = input_spec["path"]
+    with input_path.open("rb") as handle:
+        dataset.uploaded_add_file(handle, input_path.name)
     settings = dataset.autodetect_settings()
     settings.save()
 

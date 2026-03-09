@@ -20,7 +20,7 @@ To run a case successfully, this README assumes:
 - You have Python with `dataikuapi` installed.
 - You have exported `DATAIKU_URL` and `DATAIKU_API_KEY`.
 - Your Dataiku API key can create and delete projects.
-- Built-in cases use local fixture CSVs and do not require a pre-existing DSS source project.
+- Built-in cases use local input data CSVs and do not require a pre-existing DSS source project.
 - Custom cases can still copy from an existing DSS `source_project` if you prefer that mode.
 - Optional: set `DATAIKU_SSL_VERIFY=true|false|/path/to/ca-bundle.pem` if you need explicit TLS verification control.
 
@@ -70,7 +70,7 @@ python run_test.py dates \
 ## Layout
 
 - `cases/<case_name>/case.json`: case definition
-- `cases/<case_name>/fixtures/*`: local input datasets for that case
+- `cases/<case_name>/input_data/*`: local input datasets for that case
 - `evals/__init__.py`: setup, validate, teardown, and evaluator loading
 - `evals/builtins.py`: built-in evaluators you can reuse or copy
 - `agents/*.py`: bundled agent scripts for common CLIs
@@ -227,9 +227,9 @@ Example:
   "description": "What this case validates.",
   "prompt": "The natural language task to give the agent...",
   "sources": ["Source_Dataset_Name"],
-  "source_fixtures": {
+  "input_data": {
     "Source_Dataset_Name": {
-      "path": "fixtures/Source_Dataset_Name.csv"
+      "path": "input_data/Source_Dataset_Name.csv"
     }
   },
   "expected_outputs": {
@@ -298,9 +298,9 @@ Example:
 
 Key fields:
 
-- `source_fixtures`: optional map of source dataset names to local fixture files stored in the repo
+- `input_data`: optional map of source dataset names to local input data files stored with the case
   Paths are resolved relative to the case file directory.
-- `source_project`: optional Dataiku project containing source datasets to copy from when a fixture is not provided
+- `source_project`: optional Dataiku project containing source datasets to copy from when input data is not provided
 - `prompt`: the task the agent sees
 - `sources`: datasets created or copied into the generated project before the agent runs
 - `expected_outputs`: final datasets used by the default `output_datasets` evaluator
@@ -318,7 +318,7 @@ Case validation:
 
 - The harness validates case files before setup starts
 - Base case fields are always required: `name`, `description`, `prompt`, `sources`
-- Each source dataset must be backed by either a `source_fixtures` entry or a `source_project`
+- Each source dataset must be backed by either an `input_data` entry or a `source_project`
 - Each configured evaluator also validates its own spec and fails early with a targeted error if required fields are missing
 
 Anonymous flow graph format:
