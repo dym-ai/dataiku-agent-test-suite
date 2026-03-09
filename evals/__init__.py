@@ -8,13 +8,13 @@ from pathlib import Path
 
 from .builtins import BUILTIN_EVALUATORS, BUILTIN_EVALUATOR_VALIDATORS
 
+REPO_ROOT = Path(__file__).parent.parent
 CASES_DIR = Path(__file__).parent.parent / "cases"
 DEFAULT_EVALS = [{"name": "output_datasets"}]
 REQUIRED_CASE_FIELDS = {
     "name": str,
     "description": str,
     "prompt": str,
-    "source_project": str,
 }
 
 
@@ -31,15 +31,17 @@ def _load_case(name):
 
 
 def setup(client, case_name):
-    """Create a clean project and copy source datasets from a case source project.
+    """Create a clean project and prepare source datasets for a case.
 
     Returns dict with:
         - project_key: the new project key
         - prompt: the natural language task to give the agent
-        - sources: list of source dataset names copied
+        - sources: list of source dataset names prepared in the project
     """
     case = _load_case(case_name)
-    source_project = client.get_project(case["source_project"])
+    source_fixtures = _source_fixture_specs(case)
+    source_project_name = case.get("source_project")
+    source_project = client.get_project(source_project_name) if source_project_name else None
 
     project_key = _build_project_key(case_name)
     auth_info = client.get_auth_info()
@@ -53,17 +55,15 @@ def setup(client, case_name):
 
         copied_names = []
         for ds_name in case["sources"]:
-            source_ds = source_project.get_dataset(ds_name)
-            target_name = ds_name
-
-            builder = test_project.new_managed_dataset(target_name)
-            builder.with_store_into("filesystem_managed")
-            builder.create()
-
-            target_ds = test_project.get_dataset(target_name)
-            future = source_ds.copy_to(target_ds, sync_schema=True)
-            future.wait_for_result()
-            copied_names.append(target_name)
+            fixture_spec = source_fixtures.get(ds_name)
+            if fixture_spec is not None:
+                _create_uploaded_dataset_from_fixture(test_project, ds_name, fixture_spec)
+            else:
+                source_ds = source_project.get_dataset(ds_name)
+                target_ds = _create_managed_source_dataset(test_project, ds_name)
+                future = source_ds.copy_to(target_ds, sync_schema=True)
+                future.wait_for_result()
+            copied_names.append(ds_name)
     except Exception:
         if created_project:
             _delete_project_quietly(client, project_key)
@@ -120,6 +120,21 @@ def _validate_case(case, path):
         if not isinstance(source_name, str) or not source_name.strip():
             raise CaseValidationError(f"{path}: sources[{index}] must be a non-empty string")
 
+    source_project_name = case.get("source_project")
+    if source_project_name is not None:
+        if not isinstance(source_project_name, str) or not source_project_name.strip():
+            raise CaseValidationError(f"{path}: field 'source_project' must be a non-empty string when provided")
+
+    source_fixtures = _source_fixture_specs(case)
+    if not source_project_name and not source_fixtures:
+        raise CaseValidationError(f"{path}: define 'source_project', 'source_fixtures', or both")
+
+    for source_name in sources:
+        if source_name not in source_fixtures and not source_project_name:
+            raise CaseValidationError(
+                f"{path}: source '{source_name}' requires either 'source_project' or a matching source_fixtures entry"
+            )
+
     eval_specs = case.get("evals") or DEFAULT_EVALS
     if not isinstance(eval_specs, list) or not eval_specs:
         raise CaseValidationError(f"{path}: field 'evals' must be a non-empty list when provided")
@@ -160,6 +175,48 @@ def _delete_project_quietly(client, project_key):
         client.get_project(project_key).delete()
     except Exception:
         pass
+
+
+def _source_fixture_specs(case):
+    raw_specs = case.get("source_fixtures") or {}
+    if not isinstance(raw_specs, dict):
+        raise CaseValidationError("field 'source_fixtures' must be an object when provided")
+
+    specs = {}
+    for dataset_name, spec in raw_specs.items():
+        if not isinstance(dataset_name, str) or not dataset_name.strip():
+            raise CaseValidationError("source_fixtures keys must be non-empty dataset names")
+        if not isinstance(spec, dict):
+            raise CaseValidationError(f"source_fixtures.{dataset_name} must be an object")
+
+        path_value = spec.get("path")
+        if not isinstance(path_value, str) or not path_value.strip():
+            raise CaseValidationError(f"source_fixtures.{dataset_name}.path must be a non-empty string")
+
+        resolved_path = (REPO_ROOT / path_value).resolve()
+        if not resolved_path.is_file():
+            raise CaseValidationError(f"source_fixtures.{dataset_name}.path does not exist: {resolved_path}")
+
+        specs[dataset_name] = {
+            "path": resolved_path,
+        }
+    return specs
+
+
+def _create_managed_source_dataset(project, dataset_name):
+    builder = project.new_managed_dataset(dataset_name)
+    builder.with_store_into("filesystem_managed")
+    builder.create()
+    return project.get_dataset(dataset_name)
+
+
+def _create_uploaded_dataset_from_fixture(project, dataset_name, fixture_spec):
+    dataset = project.create_upload_dataset(dataset_name)
+    fixture_path = fixture_spec["path"]
+    with fixture_path.open("rb") as handle:
+        dataset.uploaded_add_file(handle, fixture_path.name)
+    settings = dataset.autodetect_settings()
+    settings.save()
 
 
 def _resolve_evaluator(name):
