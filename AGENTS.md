@@ -34,6 +34,7 @@ Assume the user will usually:
 - Keep the default path minimal and easy to use.
 - Add stricter or more opinionated behavior as opt-in evaluator logic, not as global harness behavior.
 - If a change makes the harness more coupled to one agent, one environment, or one methodology, assume that change is probably wrong unless the repo’s purpose clearly requires it.
+- Don't worry about backwards compatibility with any changes you make.
 
 # Repo Knowledge
 
