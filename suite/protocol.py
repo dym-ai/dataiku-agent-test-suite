@@ -24,7 +24,7 @@ def build_request(case_name, case, workspace=None):
     }
 
 
-def run_agent_command(agent_command, request, timeout_seconds=None):
+def run_agent_command(agent_command, request, timeout_seconds=None, cwd=None):
     """Run an agent command with request/response JSON files."""
     if not agent_command:
         raise ValueError("Agent command is required")
@@ -43,6 +43,7 @@ def run_agent_command(agent_command, request, timeout_seconds=None):
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
+                cwd=str(cwd) if cwd is not None else None,
             )
         except subprocess.TimeoutExpired as exc:
             response = _load_response(response_path)
