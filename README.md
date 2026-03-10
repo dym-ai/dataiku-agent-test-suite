@@ -34,7 +34,7 @@ If you use `--artifacts-dir`, the harness also writes the full request, agent re
 
 ```text
 Case: dates
-Project: BOBTEST_DATES_1772835245_A1B2C3D4
+Project: COBUILD_DATES_1772835245_A1B2C3D4
 Agent: completed
 Result: PASS
 
@@ -90,6 +90,7 @@ Example config:
 ```json
 {
   "agent_command": "codex",
+  "agent_workspace": "/path/to/your-agent-repo",
   "artifacts_dir": "./artifacts",
   "agent_timeout_seconds": 900
 }
@@ -101,16 +102,9 @@ With `.dataiku-agent-suite.json` in the repository root, the command becomes:
 python run_test.py dates
 ```
 
+For real use, it is strongly recommended to point `agent_workspace` at your own agent repository, where your tools, skills, and scripts live.
+
 If you do not set `agent_workspace`, the harness creates a fresh temporary workspace for each run so the agent does not get access to this harness repo by default.
-
-For real use, it is strongly recommended to point `agent_workspace` at your own agent repository, where your tools, skills, and scripts live:
-
-```json
-{
-  "agent_command": "codex",
-  "agent_workspace": "/path/to/your-agent-repo"
-}
-```
 
 Avoid pointing `agent_workspace` at this harness repo, because that can expose case definitions and evaluator logic to the agent.
 

@@ -60,7 +60,7 @@ The harness currently sends:
 {
   "version": 1,
   "case_name": "dates",
-  "project_key": "BOBTEST_DATES_1772835245_A1B2C3D4",
+  "project_key": "COBUILD_DATES_1772835245_A1B2C3D4",
   "prompt": "The natural language task...",
   "sources": ["Dates"],
   "workspace": "/path/to/agent/workspace"

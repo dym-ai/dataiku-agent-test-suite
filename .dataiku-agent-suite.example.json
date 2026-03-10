@@ -1,5 +1,6 @@
 {
   "agent_command": "codex",
+  "agent_workspace": "/path/to/your-agent-repo",
   "artifacts_dir": "./artifacts",
   "agent_timeout_seconds": 900,
   "keep": false,
