@@ -12,10 +12,12 @@ Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import shlex
 import sys
+import tempfile
 from pathlib import Path
 
 import dataikuapi
@@ -27,12 +29,13 @@ from suite.report import format_report
 
 
 BUILTIN_AGENTS = {"claude", "codex"}
-CONFIG_PATH = Path(__file__).resolve().parent / ".dataiku-agent-suite.json"
+REPO_ROOT = Path(__file__).resolve().parent
+CONFIG_PATH = REPO_ROOT / ".dataiku-agent-suite.json"
 DEFAULT_SETTINGS = {
     "agent_command": None,
     "keep": False,
     "verbose": False,
-    "workspace": None,
+    "agent_workspace": None,
     "artifacts_dir": None,
     "agent_timeout_seconds": 900,
 }
@@ -40,7 +43,7 @@ CONFIG_KEYS = {
     "agent_command",
     "keep",
     "verbose",
-    "workspace",
+    "agent_workspace",
     "artifacts_dir",
     "agent_timeout_seconds",
 }
@@ -97,8 +100,8 @@ def _load_repo_config():
         config["keep"] = _require_bool(raw_config["keep"], "keep")
     if "verbose" in raw_config:
         config["verbose"] = _require_bool(raw_config["verbose"], "verbose")
-    if "workspace" in raw_config:
-        config["workspace"] = _resolve_config_path(raw_config["workspace"], "workspace")
+    if "agent_workspace" in raw_config:
+        config["agent_workspace"] = _resolve_directory_config_path(raw_config["agent_workspace"], "agent_workspace")
     if "artifacts_dir" in raw_config:
         config["artifacts_dir"] = _resolve_config_path(raw_config["artifacts_dir"], "artifacts_dir")
     if "agent_timeout_seconds" in raw_config:
@@ -108,8 +111,6 @@ def _load_repo_config():
         )
 
     return config
-
-
 def _require_string(value, field_name):
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{CONFIG_PATH}: '{field_name}' must be a non-empty string")
@@ -133,6 +134,18 @@ def _resolve_config_path(value, field_name):
     return (CONFIG_PATH.parent / raw_path).resolve()
 
 
+def _resolve_directory_config_path(value, field_name):
+    return _require_directory(_resolve_config_path(value, field_name), f"{CONFIG_PATH}: '{field_name}'")
+
+
+def _require_directory(path, label):
+    if not path.exists():
+        raise ValueError(f"{label} does not exist: {path}")
+    if not path.is_dir():
+        raise ValueError(f"{label} must be a directory: {path}")
+    return path
+
+
 def _resolve_settings(args):
     settings = dict(DEFAULT_SETTINGS)
     settings.update(_load_repo_config())
@@ -143,16 +156,50 @@ def _resolve_settings(args):
         settings["keep"] = args.keep
     if args.verbose is not None:
         settings["verbose"] = args.verbose
-    if args.workspace is not None:
-        settings["workspace"] = Path(args.workspace).resolve()
-    elif settings["workspace"] is None:
-        settings["workspace"] = Path.cwd()
+    if args.agent_workspace is not None:
+        settings["agent_workspace"] = _require_directory(
+            Path(args.agent_workspace).resolve(),
+            "--agent-workspace",
+        )
     if args.artifacts_dir is not None:
         settings["artifacts_dir"] = Path(args.artifacts_dir).resolve()
     if args.agent_timeout_seconds is not None:
         settings["agent_timeout_seconds"] = args.agent_timeout_seconds
 
     return settings
+
+
+def _is_within(path, root):
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _warn_if_workspace_is_repo_visible(agent_workspace):
+    if _is_within(agent_workspace, REPO_ROOT):
+        print(
+            (
+                "Warning: agent workspace is inside the harness repository. "
+                "This can expose case definitions and evaluator logic to the agent "
+                "and contaminate the test."
+            ),
+            file=sys.stderr,
+        )
+        print(f"         Workspace: {agent_workspace}", file=sys.stderr)
+
+
+@contextmanager
+def _resolved_agent_workspace(agent_workspace):
+    if agent_workspace is not None:
+        resolved_workspace = agent_workspace.resolve()
+        _warn_if_workspace_is_repo_visible(resolved_workspace)
+        yield resolved_workspace, False
+        return
+
+    with tempfile.TemporaryDirectory(prefix="dataiku-agent-workspace-") as temp_dir:
+        yield Path(temp_dir).resolve(), True
 
 
 def _print_case_list():
@@ -235,7 +282,7 @@ def run(
     case_name,
     agent_name,
     keep=False,
-    workspace=None,
+    agent_workspace=None,
     verbose=False,
     artifacts_dir=None,
     agent_timeout_seconds=900,
@@ -255,40 +302,51 @@ def run(
     print(f"    Sources: {case['sources']}")
 
     try:
-        agent_command = _resolve_agent_command(agent_name)
-        print(f"\n--- Running agent...")
-        request = build_request(case_name, case, workspace=workspace)
-        agent_result = run_agent_command(
-            agent_command,
-            request,
-            timeout_seconds=agent_timeout_seconds,
-        )
-        print(agent_result.get("summary", "Agent completed"))
+        with _resolved_agent_workspace(agent_workspace) as (resolved_workspace, is_temporary_workspace):
+            workspace_label = "temporary isolated workspace" if is_temporary_workspace else "configured agent workspace"
+            print(f"    Agent workspace: {resolved_workspace} ({workspace_label})")
 
-        print(f"\n--- Validating...")
-        result = validate(client, case_name, case["project_key"], agent_stats=agent_result.get("stats"))
-        result = _apply_agent_outcome_checks(result, agent_result)
-        artifact_path = None
-        report_text = format_report(
-            case_name,
-            case["project_key"],
-            agent_result,
-            result,
-            project_url=_build_project_url(url, case["project_key"]) if keep else None,
-            verbose=verbose,
-        )
-        if artifacts_dir:
-            artifact_path = _write_artifacts(artifacts_dir, case["project_key"], request, agent_result, result, report_text)
+            agent_command = _resolve_agent_command(agent_name)
+            print(f"\n--- Running agent...")
+            request = build_request(case_name, case, workspace=resolved_workspace)
+            agent_result = run_agent_command(
+                agent_command,
+                request,
+                timeout_seconds=agent_timeout_seconds,
+            )
+            print(agent_result.get("summary", "Agent completed"))
+
+            print(f"\n--- Validating...")
+            result = validate(client, case_name, case["project_key"], agent_stats=agent_result.get("stats"))
+            result = _apply_agent_outcome_checks(result, agent_result)
+            artifact_path = None
             report_text = format_report(
                 case_name,
                 case["project_key"],
                 agent_result,
                 result,
                 project_url=_build_project_url(url, case["project_key"]) if keep else None,
-                artifacts_dir=artifact_path,
                 verbose=verbose,
             )
-            (artifact_path / "report.txt").write_text(report_text + "\n")
+            if artifacts_dir:
+                artifact_path = _write_artifacts(
+                    artifacts_dir,
+                    case["project_key"],
+                    request,
+                    agent_result,
+                    result,
+                    report_text,
+                )
+                report_text = format_report(
+                    case_name,
+                    case["project_key"],
+                    agent_result,
+                    result,
+                    project_url=_build_project_url(url, case["project_key"]) if keep else None,
+                    artifacts_dir=artifact_path,
+                    verbose=verbose,
+                )
+                (artifact_path / "report.txt").write_text(report_text + "\n")
         print()
         print(report_text)
     finally:
@@ -316,8 +374,8 @@ if __name__ == "__main__":
         help="Keep the generated project after validation",
     )
     parser.add_argument(
-        "--workspace",
-        help="Workspace path to include in the agent request (defaults to config value or current directory)",
+        "--agent-workspace",
+        help="Workspace for the agent to use (defaults to a temporary isolated directory)",
     )
     parser.add_argument(
         "--verbose",
@@ -363,7 +421,7 @@ if __name__ == "__main__":
         args.case_name,
         agent_name=settings["agent_command"],
         keep=settings["keep"],
-        workspace=settings["workspace"],
+        agent_workspace=settings["agent_workspace"],
         verbose=settings["verbose"],
         artifacts_dir=settings["artifacts_dir"],
         agent_timeout_seconds=settings["agent_timeout_seconds"],

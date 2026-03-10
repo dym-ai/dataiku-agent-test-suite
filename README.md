@@ -90,7 +90,6 @@ Example config:
 ```json
 {
   "agent_command": "codex",
-  "workspace": ".",
   "artifacts_dir": "./artifacts",
   "agent_timeout_seconds": 900
 }
@@ -101,6 +100,19 @@ With `.dataiku-agent-suite.json` in the repository root, the command becomes:
 ```bash
 python run_test.py dates
 ```
+
+If you do not set `agent_workspace`, the harness creates a fresh temporary workspace for each run so the agent does not get access to this harness repo by default.
+
+For real use, it is strongly recommended to point `agent_workspace` at your own agent repository, where your tools, skills, and scripts live:
+
+```json
+{
+  "agent_command": "codex",
+  "agent_workspace": "/path/to/your-agent-repo"
+}
+```
+
+Avoid pointing `agent_workspace` at this harness repo, because that can expose case definitions and evaluator logic to the agent.
 
 `agent_command` can point to the bundled shortcuts (`codex`, `claude`) or to your own command, such as:
 
@@ -117,7 +129,7 @@ Common add-ons:
 - `--keep` to keep the generated DSS project so you can inspect it
 - `--verbose` to show agent stdout and stderr excerpts in the report
 - `--artifacts-dir /path/to/output-artifacts` to write the full run bundle to disk
-- `--workspace /path/to/agent-workspace` to tell the agent which local folder it may use
+- `--agent-workspace /path/to/agent-workspace` to point the agent at your own repo or tools directory
 
 Keep the generated DSS project after validation:
 
@@ -130,7 +142,7 @@ Run the agent from another workspace:
 ```bash
 python run_test.py dates \
   --agent codex \
-  --workspace /path/to/agent-workspace
+  --agent-workspace /path/to/agent-workspace
 ```
 
 Write the full run bundle to disk:
@@ -210,8 +222,8 @@ Supported flags:
 - `--list-cases`: show available cases and exit
 - `--describe-case`: show the details of one case and exit
 - `--agent`: agent command to run; optional when `agent_command` is set in `.dataiku-agent-suite.json`
+- `--agent-workspace`: folder for the agent to use; defaults to a temporary isolated workspace
 - `--keep` / `--no-keep`: keep or discard the generated DSS project after validation
-- `--workspace`: folder path to include in the agent request; defaults to config or the current directory
 - `--verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
 - `--artifacts-dir`: write request/response/report files to disk
 - `--agent-timeout-seconds`: abort the agent process after a timeout; default `900`
