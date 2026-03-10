@@ -196,7 +196,7 @@ def _build_project_key(case_name):
     ts = int(time.time())
     suffix = uuid.uuid4().hex[:8].upper()
     safe_case_name = "".join(ch if ch.isalnum() else "_" for ch in case_name.upper()).strip("_")
-    return f"BOBTEST_{safe_case_name}_{ts}_{suffix}"
+    return f"COBUILD_{safe_case_name}_{ts}_{suffix}"
 
 
 def _delete_project_quietly(client, project_key):
