@@ -178,7 +178,7 @@ def _is_within(path, root):
 
 
 def _warn_if_workspace_is_repo_visible(agent_workspace):
-    if _is_within(agent_workspace, REPO_ROOT):
+    if _is_within(agent_workspace, REPO_ROOT) or _is_within(REPO_ROOT, agent_workspace):
         print(
             (
                 "Warning: agent workspace is inside the harness repository. "
