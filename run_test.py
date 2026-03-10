@@ -313,6 +313,7 @@ def run(
                 agent_command,
                 request,
                 timeout_seconds=agent_timeout_seconds,
+                cwd=resolved_workspace,
             )
             print(agent_result.get("summary", "Agent completed"))
 
