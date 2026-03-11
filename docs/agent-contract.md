@@ -89,6 +89,9 @@ Your agent should write something like:
   "stderr": "Optional agent stderr",
   "stats": {
     "duration_ms": 12345,
+    "input_tokens": 1000,
+    "cached_input_tokens": 200,
+    "output_tokens": 234,
     "total_tokens": 1234,
     "tool_uses": 10
   }
@@ -105,5 +108,6 @@ Common `status` values:
 Notes:
 
 - `duration_ms`, `total_tokens`, and `tool_uses` are optional
+- `input_tokens`, `cached_input_tokens`, and `output_tokens` are also supported when the agent or wrapper can report them directly
 - `tool_uses` is most reliable when the agent writes it directly into `response.stats`
 - The bundled wrappers also attempt best-effort stats extraction from CLI output
