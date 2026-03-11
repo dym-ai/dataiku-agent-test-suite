@@ -38,13 +38,36 @@ def normalize_stats(stats):
     if "tool_calls" in normalized and "tool_uses" not in normalized:
         normalized["tool_uses"] = normalized["tool_calls"]
 
-    for stat_name in ("duration_ms", "total_tokens", "tool_uses"):
+    for stat_name in (
+        "duration_ms",
+        "input_tokens",
+        "cached_input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "tool_uses",
+    ):
         if stat_name in normalized:
             coerced = _coerce_int(normalized.get(stat_name))
             if coerced is None:
                 normalized.pop(stat_name, None)
             else:
                 normalized[stat_name] = coerced
+
+    tool_uses_by_type = normalized.get("tool_uses_by_type")
+    if isinstance(tool_uses_by_type, dict):
+        coerced_breakdown = {}
+        for tool_type, value in tool_uses_by_type.items():
+            if not isinstance(tool_type, str) or not tool_type.strip():
+                continue
+            coerced_value = _coerce_int(value)
+            if coerced_value is not None:
+                coerced_breakdown[tool_type] = coerced_value
+        if coerced_breakdown:
+            normalized["tool_uses_by_type"] = coerced_breakdown
+        else:
+            normalized.pop("tool_uses_by_type", None)
+    else:
+        normalized.pop("tool_uses_by_type", None)
 
     normalized.pop("tool_calls", None)
     return normalized
