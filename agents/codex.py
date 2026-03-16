@@ -54,7 +54,7 @@ def main():
 
     duration_ms = int((time.time() - start) * 1000)
 
-    structured_stats, last_agent_message = _extract_codex_stats(result.stdout)
+    structured_stats, last_agent_message, tool_trace = _extract_codex_stats(result.stdout)
     stats = extract_stats(result.stdout, result.stderr)
     stats.update(structured_stats)
     stats = normalize_stats(stats)
@@ -66,6 +66,7 @@ def main():
         "stdout": final_message or last_agent_message or result.stdout,
         "stderr": result.stderr,
         "stats": stats,
+        "tool_trace": tool_trace,
     }
     Path(args.response).write_text(json.dumps(response, indent=2))
 
@@ -74,6 +75,7 @@ def _extract_codex_stats(event_stream):
     stats = {}
     last_agent_message = ""
     tool_uses_by_type = {}
+    tool_trace = []
 
     for event in _parse_jsonl_events(event_stream):
         event_type = event.get("type")
@@ -96,12 +98,24 @@ def _extract_codex_stats(event_stream):
             last_agent_message = item["text"]
         if item_type in TOOL_EVENT_TYPES:
             tool_uses_by_type[item_type] = tool_uses_by_type.get(item_type, 0) + 1
+            if item_type == "mcp_tool_call":
+                server = item.get("server") or ""
+                tool = item.get("tool") or ""
+                tool_trace.append({
+                    "name": f"mcp__{server}__{tool}",
+                    "input": item.get("arguments") or {},
+                })
+            else:
+                tool_trace.append({
+                    "name": item_type,
+                    "input": {},
+                })
 
     if tool_uses_by_type:
         stats["tool_uses_by_type"] = tool_uses_by_type
         stats["tool_uses"] = sum(tool_uses_by_type.values())
 
-    return stats, last_agent_message
+    return stats, last_agent_message, tool_trace
 
 
 def _parse_jsonl_events(text):

@@ -763,12 +763,133 @@ def _normalize(val):
     return s
 
 
+def skill_files_read(client, project_key, case, spec, context):
+    """Check that all listed skill file paths were read via the Read tool."""
+    required = spec.get("skills", [])
+    tool_trace = context.get("tool_trace") or []
+    read_paths = {
+        call.get("input", {}).get("file_path", "")
+        for call in tool_trace
+        if call.get("name") == "Read"
+    }
+
+    if not read_paths:
+        return [{
+            "check": "skill_files_read",
+            "passed": True,
+            "skipped": True,
+            "message": "skipped: no Read tool calls in trace",
+        }]
+
+    return [
+        {
+            "check": "skill_file_read",
+            "skill": skill_path,
+            "passed": any(p.endswith(skill_path) for p in read_paths),
+        }
+        for skill_path in required
+    ]
+
+
+def validate_skill_files_read_spec(spec, case):
+    skills = spec.get("skills")
+    if not isinstance(skills, list) or not skills:
+        raise ValueError("skill_files_read requires a non-empty skills list")
+    for index, skill_path in enumerate(skills):
+        if not isinstance(skill_path, str) or not skill_path.strip():
+            raise ValueError(f"skill_files_read skills[{index}] must be a non-empty string")
+
+
+def tool_calls_include(client, project_key, case, spec, context):
+    """Check that all listed tool names appear at least once in the tool trace."""
+    required = spec.get("tools", [])
+    tool_trace = context.get("tool_trace") or []
+    actual_names = {call.get("name") for call in tool_trace}
+    return [
+        {
+            "check": "tool_call_present",
+            "tool": tool_name,
+            "passed": tool_name in actual_names,
+        }
+        for tool_name in required
+    ]
+
+
+def validate_tool_calls_include_spec(spec, case):
+    _validate_tool_name_list(spec.get("tools"), "tool_calls_include", "tools")
+
+
+def skills_used(client, project_key, case, spec, context):
+    """Check that all listed skills were invoked via the Skill tool."""
+    required = spec.get("skills", [])
+    tool_trace = context.get("tool_trace") or []
+    skill_calls = [call for call in tool_trace if call.get("name") == "Skill"]
+
+    if not skill_calls:
+        return [{
+            "check": "skills_used",
+            "passed": True,
+            "skipped": True,
+            "message": "skipped: no Skill tool calls in trace (Claude Code only)",
+        }]
+
+    actual_skills = {call.get("input", {}).get("skill") for call in skill_calls}
+    return [
+        {
+            "check": "skill_used",
+            "skill": skill_name,
+            "passed": skill_name in actual_skills,
+        }
+        for skill_name in required
+    ]
+
+
+def validate_skills_used_spec(spec, case):
+    skills = spec.get("skills")
+    if not isinstance(skills, list) or not skills:
+        raise ValueError("skills_used requires a non-empty skills list")
+    for index, skill_name in enumerate(skills):
+        if not isinstance(skill_name, str) or not skill_name.strip():
+            raise ValueError(f"skills_used skills[{index}] must be a non-empty string")
+
+
+def tool_calls_exclude(client, project_key, case, spec, context):
+    """Check that none of the listed tool names appear in the tool trace."""
+    forbidden = spec.get("tools", [])
+    tool_trace = context.get("tool_trace") or []
+    actual_names = {call.get("name") for call in tool_trace}
+    return [
+        {
+            "check": "tool_call_absent",
+            "tool": tool_name,
+            "passed": tool_name not in actual_names,
+        }
+        for tool_name in forbidden
+    ]
+
+
+def validate_tool_calls_exclude_spec(spec, case):
+    _validate_tool_name_list(spec.get("tools"), "tool_calls_exclude", "tools")
+
+
+def _validate_tool_name_list(tools, evaluator_name, field_name):
+    if not isinstance(tools, list) or not tools:
+        raise ValueError(f"{evaluator_name} requires a non-empty {field_name} list")
+    for index, tool_name in enumerate(tools):
+        if not isinstance(tool_name, str) or not tool_name.strip():
+            raise ValueError(f"{evaluator_name} {field_name}[{index}] must be a non-empty string")
+
+
 BUILTIN_EVALUATORS = {
     "output_datasets": output_datasets,
     "flow_shape_match": flow_shape_match,
     "recipe_config_match": recipe_config_match,
     "recipe_type_counts": recipe_type_counts,
     "forbid_recipe_types": forbid_recipe_types,
+    "tool_calls_include": tool_calls_include,
+    "skills_used": skills_used,
+    "tool_calls_exclude": tool_calls_exclude,
+    "skill_files_read": skill_files_read,
 }
 
 BUILTIN_EVALUATOR_VALIDATORS = {
@@ -777,4 +898,8 @@ BUILTIN_EVALUATOR_VALIDATORS = {
     "recipe_config_match": validate_recipe_config_match_spec,
     "recipe_type_counts": validate_recipe_type_counts_spec,
     "forbid_recipe_types": validate_forbid_recipe_types_spec,
+    "tool_calls_include": validate_tool_calls_include_spec,
+    "skills_used": validate_skills_used_spec,
+    "tool_calls_exclude": validate_tool_calls_exclude_spec,
+    "skill_files_read": validate_skill_files_read_spec,
 }
