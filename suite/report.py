@@ -57,6 +57,16 @@ def format_report(
             lines.append(f"- timeout: {stats['timeout_seconds']}s")
         if "total_tokens" in stats:
             lines.append(f"- total tokens: {stats['total_tokens']:,}")
+        if "input_tokens" in stats:
+            lines.append(f"- input tokens: {stats['input_tokens']:,}")
+        if "cache_read_tokens" in stats:
+            lines.append(f"- cache read tokens: {stats['cache_read_tokens']:,}")
+        elif "cached_input_tokens" in stats:
+            lines.append(f"- cached input tokens: {stats['cached_input_tokens']:,}")
+        if "cache_creation_tokens" in stats:
+            lines.append(f"- cache write tokens: {stats['cache_creation_tokens']:,}")
+        if "output_tokens" in stats:
+            lines.append(f"- output tokens: {stats['output_tokens']:,}")
         if "tool_uses" in stats:
             lines.append(f"- tool uses: {stats['tool_uses']}")
         tool_uses_by_type = stats.get("tool_uses_by_type") or {}

@@ -41,6 +41,8 @@ def normalize_stats(stats):
     for stat_name in (
         "duration_ms",
         "input_tokens",
+        "cache_creation_tokens",
+        "cache_read_tokens",
         "cached_input_tokens",
         "output_tokens",
         "total_tokens",
