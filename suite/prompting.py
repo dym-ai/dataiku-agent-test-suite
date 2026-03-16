@@ -4,7 +4,8 @@
 def build_agent_prompt(request):
     return "\n\n".join(
         [
-            "If the provided workspace contains useful local tools or files, you may use them. "
+            "Before starting any work, read AGENTS.md from the workspace. "
+            "Use the tools and skills documented there to complete the task. "
             "Do not rely on files outside the provided workspace.",
             f"You are working in Dataiku project '{request['project_key']}'. "
             f"The project already has these source datasets: {request.get('sources', [])}.",

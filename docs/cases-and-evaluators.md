@@ -150,6 +150,47 @@ Example:
 }
 ```
 
+### `tool_calls_include`
+
+Passes if every listed tool name appears at least once in the agent's tool trace.
+
+Example:
+
+```json
+{
+  "name": "tool_calls_include",
+  "tools": ["mcp__dataiku-mcp__list_datasets", "mcp__dataiku-mcp__create_recipe"]
+}
+```
+
+### `skills_used`
+
+Passes if every listed skill was invoked via the `Skill` tool.
+
+Example:
+
+```json
+{
+  "name": "skills_used",
+  "skills": ["claude-developer-platform"]
+}
+```
+
+### `tool_calls_exclude`
+
+Passes if none of the listed tool names appear in the agent's tool trace.
+
+Example:
+
+```json
+{
+  "name": "tool_calls_exclude",
+  "tools": ["Bash"]
+}
+```
+
+> **Note:** These three evaluators rely on `tool_trace` in the agent response. `agents/claude.py` produces this automatically. If the agent doesn't emit a trace, `tool_calls_include` and `skills_used` will fail (the tools were not observed), while `tool_calls_exclude` will pass.
+
 ## Custom Evaluators
 
 You can add a local Python evaluator without changing the harness core.
@@ -167,6 +208,14 @@ The evaluator function should accept:
 ```
 
 and return a list of check dicts.
+
+To access the agent's tool trace, add a 5th positional parameter:
+
+```python
+(client, project_key, case, spec, context)
+```
+
+`context["tool_trace"]` is a list of `{"name": ..., "input": {...}}` dicts, one per tool call. It is an empty list when the agent does not emit a trace.
 
 Optional:
 

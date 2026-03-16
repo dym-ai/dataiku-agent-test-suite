@@ -183,7 +183,39 @@ By default, the harness keeps validation simple and focuses on the final output 
 - row counts match
 - sampled values match
 
-Cases can also use stricter checks when you want to judge the flow shape, recipe counts, or recipe configuration.
+### Checking tool and skill usage
+
+You can assert that an agent used specific MCP tools or skills by adding evaluators to your case. 
+**Note that skill evaluation will only work with Claude Code, not Codex**
+
+For example, to verify that an agent used the right skills and tools for the `dates` case, add this to the case.json. This assumes that you named your MCP server "dataiku-mcp" in your config:
+
+```json
+"evals": [
+  {"name": "output_datasets"},
+  {
+    "name": "tool_calls_include",
+    "tools": [
+      "mcp__dataiku-mcp__create_recipe",
+      "mcp__dataiku-mcp__get_recipe_settings",
+      "mcp__dataiku-mcp__set_recipe_settings"
+    ]
+  },
+  {
+    "name": "skills_used",
+    "skills": [
+      "recipes/SKILL.md",
+      "recipes/recipe-types/prepare/skill.md"
+    ]
+  }
+]
+```
+
+- `tool_calls_include` passes if every listed tool was called at least once.
+- `tool_calls_exclude` passes if none of the listed tools were called.
+- `skills_used` passes if every listed skill was invoked. This is Claude Code-specific; Codex does not have a skill system, so this check will always fail on Codex.
+
+The tool name format is `mcp__{server}__{tool}`. Both bundled wrappers emit a `tool_trace` automatically. For cross-agent compatibility, make sure the MCP server is registered under the same name in both agents (e.g. `dataiku-mcp`).
 
 ## Reports And Artifacts
 

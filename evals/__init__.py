@@ -1,6 +1,7 @@
 """Evaluation helpers for case setup, validation, and teardown."""
 
 import importlib
+import inspect
 import json
 import os
 import time
@@ -105,15 +106,16 @@ def setup(client, case_name):
     }
 
 
-def validate(client, case_name, project_key, agent_stats=None):
+def validate(client, case_name, project_key, agent_stats=None, tool_trace=None):
     """Validate a project by running the case's configured evaluators."""
     case = _load_case(case_name)
     checks = []
+    context = {"tool_trace": tool_trace or []}
 
     for spec in case.get("evals") or DEFAULT_EVALS:
         evaluator_name = spec["name"]
         evaluator, _ = _resolve_evaluator(evaluator_name)
-        eval_checks = evaluator(client, project_key, case, spec)
+        eval_checks = _call_evaluator(evaluator, client, project_key, case, spec, context)
         for check in eval_checks:
             check.setdefault("evaluator", evaluator_name)
         checks.extend(eval_checks)
@@ -125,6 +127,22 @@ def validate(client, case_name, project_key, agent_stats=None):
     if agent_stats:
         result["agent_stats"] = agent_stats
     return result
+
+
+def _call_evaluator(evaluator, client, project_key, case, spec, context):
+    """Call evaluator, passing context as a 5th arg if the evaluator accepts it."""
+    try:
+        sig = inspect.signature(evaluator)
+        positional = [
+            p for p in sig.parameters.values()
+            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        var_pos = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in sig.parameters.values())
+        if len(positional) >= 5 or var_pos:
+            return evaluator(client, project_key, case, spec, context)
+    except (ValueError, TypeError):
+        pass
+    return evaluator(client, project_key, case, spec)
 
 
 def teardown(client, project_key):
