@@ -96,7 +96,8 @@ def _parse_stream_json(stdout):
             cache_creation = usage.get("cache_creation_input_tokens", 0)
             cache_read = usage.get("cache_read_input_tokens", 0)
             stats["input_tokens"] = input_tokens
-            stats["cached_input_tokens"] = cache_creation + cache_read
+            stats["cache_creation_tokens"] = cache_creation
+            stats["cache_read_tokens"] = cache_read
             stats["output_tokens"] = output_tokens
             stats["total_tokens"] = input_tokens + output_tokens + cache_creation + cache_read
 
