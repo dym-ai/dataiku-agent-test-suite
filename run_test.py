@@ -25,6 +25,7 @@ import urllib3
 
 from evals import DEFAULT_EVALS, describe_case, list_cases, setup, teardown, validate
 from suite.protocol import build_request, run_agent_command
+from suite.redaction import redact_text, redact_value
 from suite.report import format_report
 
 
@@ -267,12 +268,13 @@ def _apply_agent_outcome_checks(validation_result, agent_result):
 def _write_artifacts(artifacts_root, project_key, request, agent_result, validation_result, report_text):
     artifact_dir = artifacts_root / project_key
     artifact_dir.mkdir(parents=True, exist_ok=True)
+    safe_agent_result = redact_value(agent_result)
 
     (artifact_dir / "request.json").write_text(json.dumps(request, indent=2) + "\n")
-    (artifact_dir / "agent_response.json").write_text(json.dumps(agent_result, indent=2) + "\n")
+    (artifact_dir / "agent_response.json").write_text(json.dumps(safe_agent_result, indent=2) + "\n")
     (artifact_dir / "validation_result.json").write_text(json.dumps(validation_result, indent=2) + "\n")
-    (artifact_dir / "agent_stdout.txt").write_text(agent_result.get("stdout", ""))
-    (artifact_dir / "agent_stderr.txt").write_text(agent_result.get("stderr", ""))
+    (artifact_dir / "agent_stdout.txt").write_text(safe_agent_result.get("stdout", ""))
+    (artifact_dir / "agent_stderr.txt").write_text(safe_agent_result.get("stderr", ""))
     (artifact_dir / "report.txt").write_text(report_text + "\n")
 
     return artifact_dir
@@ -315,7 +317,7 @@ def run(
                 timeout_seconds=agent_timeout_seconds,
                 cwd=resolved_workspace,
             )
-            print(agent_result.get("summary", "Agent completed"))
+            print(redact_text(agent_result.get("summary", "Agent completed")))
 
             print(f"\n--- Validating...")
             result = validate(
