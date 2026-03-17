@@ -1,5 +1,7 @@
 """Human-friendly formatting for test results."""
 
+from suite.redaction import redact_value
+
 
 def format_report(
     case_name,
@@ -10,6 +12,7 @@ def format_report(
     artifacts_dir=None,
     verbose=False,
 ):
+    agent_result = redact_value(agent_result)
     lines = [
         f"Case: {case_name}",
         f"Project: {project_key}",

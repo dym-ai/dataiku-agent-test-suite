@@ -27,7 +27,7 @@ A typical successful run gives you a short terminal report with:
 - **Check results**: which validations passed or failed
 - **Agent summary**: a short human-readable summary from the agent
 
-If you use `--artifacts-dir`, the harness also writes the full request, agent response, validation result, and report to disk for later inspection.
+If you use `--artifacts-dir`, the harness also writes the full request, agent response, validation result, and report to disk for later inspection. Persisted agent output is sanitized to redact secrets before it is written.
 
 <details>
 <summary>Example terminal report</summary>
@@ -236,6 +236,8 @@ With `--artifacts-dir`, each run writes a subdirectory named after the generated
 - `report.txt`
 - `agent_stdout.txt`
 - `agent_stderr.txt`
+
+Persisted agent output and verbose report excerpts are sanitized to redact exact environment secret values and common auth patterns such as bearer tokens and `*_api_key` fields.
 
 If `--keep` is also set, the report includes the DSS project URL.
 
