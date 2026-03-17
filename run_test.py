@@ -318,7 +318,13 @@ def run(
             print(agent_result.get("summary", "Agent completed"))
 
             print(f"\n--- Validating...")
-            result = validate(client, case_name, case["project_key"], agent_stats=agent_result.get("stats"))
+            result = validate(
+                client,
+                case_name,
+                case["project_key"],
+                agent_stats=agent_result.get("stats"),
+                tool_trace=agent_result.get("tool_trace"),
+            )
             result = _apply_agent_outcome_checks(result, agent_result)
             artifact_path = None
             report_text = format_report(

@@ -8,6 +8,24 @@
       "path": "input_data/Dates.csv"
     }
   },
+  "evals": [
+    {"name": "output_datasets"},
+    {
+      "name": "tool_calls_include",
+      "tools": [
+        "mcp__dataiku-mcp__create_recipe",
+        "mcp__dataiku-mcp__get_recipe_settings",
+        "mcp__dataiku-mcp__set_recipe_settings"
+      ]
+    },
+    {
+      "name": "skill_files_read",
+      "skills": [
+        "recipes/SKILL.md",
+        "recipes/recipe-types/prepare/SKILL.md"
+      ]
+    }
+  ],
   "expected_outputs": {
     "Dates_with_expiration": {
       "schema": [
