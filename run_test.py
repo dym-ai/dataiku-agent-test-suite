@@ -12,21 +12,17 @@ Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
 import shlex
 import sys
-import tempfile
 from pathlib import Path
 
 import dataikuapi
 import urllib3
 
-from evals import DEFAULT_EVALS, describe_case, list_cases, setup, teardown, validate
-from suite.protocol import build_request, run_agent_command
-from suite.redaction import redact_text, redact_value
-from suite.report import format_report
+from evals import DEFAULT_EVALS, describe_case, list_cases
+from suite.runner import run_case
 
 
 BUILTIN_AGENTS = {"claude", "codex"}
@@ -74,10 +70,6 @@ def _configure_ssl_verify(client):
     client._session.verify = ssl_verify
 
 
-def _build_project_url(base_url, project_key):
-    return f"{base_url.rstrip('/')}/projects/{project_key}/"
-
-
 def _load_repo_config():
     if not CONFIG_PATH.is_file():
         return {}
@@ -112,6 +104,8 @@ def _load_repo_config():
         )
 
     return config
+
+
 def _require_string(value, field_name):
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{CONFIG_PATH}: '{field_name}' must be a non-empty string")
@@ -170,39 +164,6 @@ def _resolve_settings(args):
     return settings
 
 
-def _is_within(path, root):
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
-def _warn_if_workspace_is_repo_visible(agent_workspace):
-    if _is_within(agent_workspace, REPO_ROOT) or _is_within(REPO_ROOT, agent_workspace):
-        print(
-            (
-                "Warning: agent workspace is inside the harness repository. "
-                "This can expose case definitions and evaluator logic to the agent "
-                "and contaminate the test."
-            ),
-            file=sys.stderr,
-        )
-        print(f"         Workspace: {agent_workspace}", file=sys.stderr)
-
-
-@contextmanager
-def _resolved_agent_workspace(agent_workspace):
-    if agent_workspace is not None:
-        resolved_workspace = agent_workspace.resolve()
-        _warn_if_workspace_is_repo_visible(resolved_workspace)
-        yield resolved_workspace, False
-        return
-
-    with tempfile.TemporaryDirectory(prefix="dataiku-agent-workspace-") as temp_dir:
-        yield Path(temp_dir).resolve(), True
-
-
 def _print_case_list():
     cases = list_cases()
     print("Available cases")
@@ -238,48 +199,6 @@ def _print_case_description(case_name):
     print(case["prompt"])
 
 
-def _apply_agent_outcome_checks(validation_result, agent_result):
-    checks = list(validation_result["checks"])
-
-    returncode = agent_result.get("agent_returncode")
-    if returncode is not None:
-        checks.insert(0, {
-            "check": "agent_returncode",
-            "passed": returncode == 0,
-            "expected": 0,
-            "actual": returncode,
-        })
-
-    status = agent_result.get("status")
-    if status is not None:
-        checks.insert(1 if returncode is not None else 0, {
-            "check": "agent_status",
-            "passed": status == "completed",
-            "expected": "completed",
-            "actual": status,
-        })
-
-    result = dict(validation_result)
-    result["checks"] = checks
-    result["passed"] = all(check["passed"] for check in checks)
-    return result
-
-
-def _write_artifacts(artifacts_root, project_key, request, agent_result, validation_result, report_text):
-    artifact_dir = artifacts_root / project_key
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    safe_agent_result = redact_value(agent_result)
-
-    (artifact_dir / "request.json").write_text(json.dumps(request, indent=2) + "\n")
-    (artifact_dir / "agent_response.json").write_text(json.dumps(safe_agent_result, indent=2) + "\n")
-    (artifact_dir / "validation_result.json").write_text(json.dumps(validation_result, indent=2) + "\n")
-    (artifact_dir / "agent_stdout.txt").write_text(safe_agent_result.get("stdout", ""))
-    (artifact_dir / "agent_stderr.txt").write_text(safe_agent_result.get("stderr", ""))
-    (artifact_dir / "report.txt").write_text(report_text + "\n")
-
-    return artifact_dir
-
-
 def run(
     case_name,
     agent_name,
@@ -294,81 +213,18 @@ def run(
     client = dataikuapi.DSSClient(url, key)
     _configure_ssl_verify(client)
 
-    print(f"--- Setting up case: {case_name}")
-    try:
-        case = setup(client, case_name)
-    except Exception as exc:
-        print(f"Setup failed: {exc}")
-        return {"passed": False, "stage": "setup", "error": str(exc)}
-    print(f"    Project: {case['project_key']}")
-    print(f"    Sources: {case['sources']}")
-
-    try:
-        with _resolved_agent_workspace(agent_workspace) as (resolved_workspace, is_temporary_workspace):
-            workspace_label = "temporary isolated workspace" if is_temporary_workspace else "configured agent workspace"
-            print(f"    Agent workspace: {resolved_workspace} ({workspace_label})")
-
-            agent_command = _resolve_agent_command(agent_name)
-            print(f"\n--- Running agent...")
-            request = build_request(case_name, case, workspace=resolved_workspace)
-            agent_result = run_agent_command(
-                agent_command,
-                request,
-                timeout_seconds=agent_timeout_seconds,
-                cwd=resolved_workspace,
-            )
-            print(redact_text(agent_result.get("summary", "Agent completed")))
-
-            print(f"\n--- Validating...")
-            result = validate(
-                client,
-                case_name,
-                case["project_key"],
-                agent_stats=agent_result.get("stats"),
-                tool_trace=agent_result.get("tool_trace"),
-            )
-            result = _apply_agent_outcome_checks(result, agent_result)
-            artifact_path = None
-            report_text = format_report(
-                case_name,
-                case["project_key"],
-                agent_result,
-                result,
-                project_url=_build_project_url(url, case["project_key"]) if keep else None,
-                verbose=verbose,
-            )
-            if artifacts_dir:
-                artifact_path = _write_artifacts(
-                    artifacts_dir,
-                    case["project_key"],
-                    request,
-                    agent_result,
-                    result,
-                    report_text,
-                )
-                report_text = format_report(
-                    case_name,
-                    case["project_key"],
-                    agent_result,
-                    result,
-                    project_url=_build_project_url(url, case["project_key"]) if keep else None,
-                    artifacts_dir=artifact_path,
-                    verbose=verbose,
-                )
-                (artifact_path / "report.txt").write_text(report_text + "\n")
-        print()
-        print(report_text)
-    finally:
-        if keep:
-            print(f"\n--- Keeping project: {case['project_key']}")
-        else:
-            print(f"\n--- Cleaning up...")
-            try:
-                teardown(client, case["project_key"])
-            except Exception as exc:
-                print(f"Cleanup failed for {case['project_key']}: {exc}")
-
-    return result
+    return run_case(
+        client,
+        url,
+        case_name,
+        agent_command=_resolve_agent_command(agent_name),
+        keep=keep,
+        agent_workspace=agent_workspace,
+        verbose=verbose,
+        artifacts_dir=artifacts_dir,
+        agent_timeout_seconds=agent_timeout_seconds,
+        repo_root=REPO_ROOT,
+    )
 
 
 if __name__ == "__main__":
