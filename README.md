@@ -186,7 +186,10 @@ By default, the harness keeps validation simple and focuses on the final output 
 ### Checking tool and skill usage
 
 You can assert that an agent used specific MCP tools or skills by adding evaluators to your case. 
-**Note that skill evaluation will only work with Claude Code, not Codex**
+`skills_used` relies on `Skill` tool calls appearing in the agent's trace. The
+bundled Claude wrapper can emit these calls; the bundled Codex wrapper does not,
+so `skills_used` will be skipped rather than fail when no `Skill` calls are
+present.
 
 For example, to verify that an agent used the right skills and tools for the `dates` case, add this to the case.json. This assumes that you named your MCP server "dataiku-mcp" in your config:
 
@@ -213,9 +216,18 @@ For example, to verify that an agent used the right skills and tools for the `da
 
 - `tool_calls_include` passes if every listed tool was called at least once.
 - `tool_calls_exclude` passes if none of the listed tools were called.
-- `skills_used` passes if every listed skill was invoked. This is Claude Code-specific; Codex does not have a skill system, so this check will always fail on Codex.
+- `skills_used` passes if every listed skill was invoked via the `Skill` tool.
+  If no `Skill` tool calls are present in the trace, the check is skipped.
 
 The tool name format is `mcp__{server}__{tool}`. Both bundled wrappers emit a `tool_trace` automatically. For cross-agent compatibility, make sure the MCP server is registered under the same name in both agents (e.g. `dataiku-mcp`).
+
+## Running Tests
+
+The repository test suite currently uses Python's built-in `unittest` runner:
+
+```bash
+python -m unittest discover -s tests -v
+```
 
 ## Reports And Artifacts
 

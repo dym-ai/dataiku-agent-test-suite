@@ -12,13 +12,17 @@ class CodexStatsExtractionTests(unittest.TestCase):
                 '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"working"}}',
                 '{"type":"item.completed","item":{"id":"item_2","type":"command_execution","status":"completed"}}',
                 '{"type":"item.completed","item":{"id":"item_3","type":"web_search","status":"completed"}}',
-                '{"type":"item.completed","item":{"id":"item_4","type":"mcp_tool_call","status":"completed"}}',
+                (
+                    '{"type":"item.completed","item":{"id":"item_4","type":"mcp_tool_call",'
+                    '"status":"completed","server":"dataiku-mcp","tool":"create_recipe",'
+                    '"arguments":{"type":"shaker"}}}'
+                ),
                 '{"type":"item.completed","item":{"id":"item_5","type":"agent_message","text":"done"}}',
                 '{"type":"turn.completed","usage":{"input_tokens":120,"cached_input_tokens":40,"output_tokens":30}}',
             ]
         )
 
-        stats, last_message = _extract_codex_stats(event_stream)
+        stats, last_message, tool_trace = _extract_codex_stats(event_stream)
 
         self.assertEqual(last_message, "done")
         self.assertEqual(
@@ -36,6 +40,17 @@ class CodexStatsExtractionTests(unittest.TestCase):
                 },
             },
         )
+        self.assertEqual(
+            tool_trace,
+            [
+                {"name": "command_execution", "input": {}},
+                {"name": "web_search", "input": {}},
+                {
+                    "name": "mcp__dataiku-mcp__create_recipe",
+                    "input": {"type": "shaker"},
+                },
+            ],
+        )
 
     def test_ignores_invalid_json_and_non_tool_items(self):
         event_stream = "\n".join(
@@ -46,10 +61,11 @@ class CodexStatsExtractionTests(unittest.TestCase):
             ]
         )
 
-        stats, last_message = _extract_codex_stats(event_stream)
+        stats, last_message, tool_trace = _extract_codex_stats(event_stream)
 
         self.assertEqual(stats, {})
         self.assertEqual(last_message, "ok")
+        self.assertEqual(tool_trace, [])
 
 
 class NormalizeStatsTests(unittest.TestCase):

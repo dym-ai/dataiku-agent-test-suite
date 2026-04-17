@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 .dataiku-agent-suite.json
 artifacts/
+docs/benchmark-harness-design.md

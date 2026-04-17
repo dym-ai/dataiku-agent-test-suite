@@ -189,7 +189,12 @@ Example:
 }
 ```
 
-> **Note:** These three evaluators rely on `tool_trace` in the agent response. `agents/claude.py` produces this automatically. If the agent doesn't emit a trace, `tool_calls_include` and `skills_used` will fail (the tools were not observed), while `tool_calls_exclude` will pass.
+> **Note:** These three evaluators rely on `tool_trace` in the agent response.
+> `agents/claude.py` produces this automatically. If the agent does not emit a
+> trace, `tool_calls_include` will fail and `tool_calls_exclude` will pass.
+> `skills_used` is skipped when the trace contains no `Skill` calls. This
+> matches agents that do not expose a first-class `Skill` tool in their trace
+> output.
 
 ## Custom Evaluators
 
