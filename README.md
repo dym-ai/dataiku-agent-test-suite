@@ -2,7 +2,7 @@
 
 This repository lets you test whether an AI agent can complete a Dataiku task successfully.
 
-You give the harness a test case and an agent command. It creates a fresh Dataiku project, gives the task to the agent, and checks whether the final result matches the case.
+You give the harness a test case and a configured profile. It creates a fresh Dataiku project, gives the task to the selected agent setup, and checks whether the final result matches the case.
 
 Your agent does not need to live in this repository. It can be Codex, Claude Code, another CLI agent, or your own wrapper script, as long as it can take a task from the harness and return a result.
 
@@ -59,7 +59,7 @@ You need:
 - An API key that can create and delete DSS projects
 - A source project on that DSS instance matching the case definition
 - Source datasets in that project that already contain data
-- A working agent CLI, or a custom agent command
+- A working agent CLI, or a custom agent command referenced by one of your profiles
 
 Optional:
 
@@ -70,39 +70,54 @@ Optional:
 The basic command is:
 
 ```bash
-python run_test.py <case_name> --agent "<agent command>"
+python run_test.py <case_name> --profile <profile_name>
 ```
 
 If you prefer not to repeat the same flags every time, you can start from [`.dataiku-agent-suite.example.json`](.dataiku-agent-suite.example.json), create a local `.dataiku-agent-suite.json`, and then run:
 
 ```bash
-python run_test.py <case_name>
+python run_test.py <case_name> --profile codex-vanilla
 ```
 
 Example with the built-in `dates` case and the bundled Codex wrapper:
 
 ```bash
-python run_test.py dates --agent codex
+python run_test.py dates --profile codex-vanilla
 ```
 
 Example config:
 
 ```json
 {
-  "agent_command": "codex",
-  "agent_workspace": "/path/to/your-agent-repo",
-  "artifacts_dir": "./artifacts",
-  "agent_timeout_seconds": 900
+  "defaults": {
+    "artifacts_dir": "./artifacts",
+    "agent_timeout_seconds": 900,
+    "env": {
+      "DATAIKU_URL": "${DATAIKU_URL}",
+      "DATAIKU_API_KEY": "${DATAIKU_API_KEY}"
+    }
+  },
+  "profiles": {
+    "codex-vanilla": {
+      "agent_command": "codex"
+    },
+    "repo-codex": {
+      "agent_command": "codex",
+      "agent_workspace": "/path/to/your-agent-repo"
+    }
+  }
 }
 ```
 
 With `.dataiku-agent-suite.json` in the repository root, the command becomes:
 
 ```bash
-python run_test.py dates
+python run_test.py dates --profile repo-codex
 ```
 
-For real use, it is strongly recommended to point `agent_workspace` at your own agent repository, where your tools, skills, and scripts live.
+Profiles define which agent command to run and, optionally, which external workspace that profile should use.
+
+For real use, it is strongly recommended to point `agent_workspace` at your own agent repository when you want the agent to work from a repo with tools, skills, and scripts.
 
 If you do not set `agent_workspace`, the harness creates a fresh temporary workspace for each run so the agent does not get access to this harness repo by default.
 
@@ -112,7 +127,11 @@ Avoid pointing `agent_workspace` at this harness repo, because that can expose c
 
 ```json
 {
-  "agent_command": "python /path/to/my_agent.py"
+  "profiles": {
+    "custom-agent": {
+      "agent_command": "python /path/to/my_agent.py"
+    }
+  }
 }
 ```
 
@@ -123,40 +142,31 @@ Common add-ons:
 - `--keep` to keep the generated DSS project so you can inspect it
 - `--verbose` to show agent stdout and stderr excerpts in the report
 - `--artifacts-dir /path/to/output-artifacts` to write the full run bundle to disk
-- `--agent-workspace /path/to/agent-workspace` to point the agent at your own repo or tools directory
 
 Keep the generated DSS project after validation:
 
 ```bash
-python run_test.py dates --agent codex --keep
-```
-
-Run the agent from another workspace:
-
-```bash
-python run_test.py dates \
-  --agent codex \
-  --agent-workspace /path/to/agent-workspace
+python run_test.py dates --profile codex-vanilla --keep
 ```
 
 Write the full run bundle to disk:
 
 ```bash
 python run_test.py dates \
-  --agent codex \
+  --profile codex-vanilla \
   --artifacts-dir /path/to/output-artifacts
 ```
 
 Show agent stdout/stderr excerpts in the terminal report:
 
 ```bash
-python run_test.py dates --agent codex --verbose
+python run_test.py dates --profile codex-vanilla --verbose
 ```
 
 Use a custom agent script or wrapper:
 
 ```bash
-python run_test.py dates --agent "python /path/to/my_agent.py"
+python run_test.py dates --profile custom-agent
 ```
 
 See what is available before you run anything:
@@ -164,6 +174,7 @@ See what is available before you run anything:
 ```bash
 python run_test.py --list-cases
 python run_test.py --describe-case dates
+python run_test.py --list-profiles
 ```
 
 ## How A Run Works
@@ -171,7 +182,7 @@ python run_test.py --describe-case dates
 Each run has three stages:
 
 1. `setup()` checks the case definition, creates a new DSS project, and copies the source datasets into it.
-2. The harness runs your agent command with `--request <path>` and `--response <path>`.
+2. The harness runs the selected profile's agent command with `--request <path>` and `--response <path>`.
 3. `validate()` checks the finished DSS project against the case's validation rules.
 
 If `--keep` is not set, the harness deletes the generated project at the end.
@@ -261,8 +272,8 @@ Supported flags:
 
 - `--list-cases`: show available cases and exit
 - `--describe-case`: show the details of one case and exit
-- `--agent`: agent command to run; optional when `agent_command` is set in `.dataiku-agent-suite.json`
-- `--agent-workspace`: folder for the agent to use; defaults to a temporary isolated workspace
+- `--list-profiles`: show configured profiles and exit
+- `--profile`: profile name from `.dataiku-agent-suite.json`
 - `--keep` / `--no-keep`: keep or discard the generated DSS project after validation
 - `--verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
 - `--artifacts-dir`: write request/response/report files to disk
@@ -288,6 +299,6 @@ Deeper reference material lives here:
 ## Typical Usage Pattern
 
 1. Pick a case from `cases/` or add a new one.
-2. Point `--agent` at a built-in wrapper or your own CLI command.
+2. Define a profile in `.dataiku-agent-suite.json` that points at a built-in wrapper or your own CLI command.
 3. Let the harness create a fresh DSS project and run the agent.
 4. Read the terminal report, or inspect the artifact bundle and kept project.

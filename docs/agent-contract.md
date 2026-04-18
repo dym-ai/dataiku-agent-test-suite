@@ -16,7 +16,7 @@ The harness owns setup, validation, reporting, cleanup, and artifact writing. Th
 When you run:
 
 ```bash
-python run_test.py dates --agent "python /path/to/my_agent.py"
+python run_test.py dates --profile custom-agent
 ```
 
 the harness invokes:
@@ -25,7 +25,7 @@ the harness invokes:
 python /path/to/my_agent.py --request /tmp/request.json --response /tmp/response.json
 ```
 
-`--agent-workspace` is not forwarded on the command line. The resolved workspace path is included in the request JSON instead, and the agent can decide whether to use it as its working directory.
+The profile's `agent_workspace` is not forwarded on the command line. The resolved workspace path is included in the request JSON instead, and the agent can decide whether to use it as its working directory.
 
 If no `agent_workspace` is configured, the harness creates a temporary isolated workspace for the run.
 
@@ -41,14 +41,18 @@ Those wrappers are convenience adapters. They work if the underlying `codex` or 
 You can also use your own command instead of the bundled wrappers, for example:
 
 ```bash
-python run_test.py dates --agent "python /path/to/my_agent.py"
+python run_test.py dates --profile custom-agent
 ```
 
 or a repo-local config like:
 
 ```json
 {
-  "agent_command": "python /path/to/my_agent.py"
+  "profiles": {
+    "custom-agent": {
+      "agent_command": "python /path/to/my_agent.py"
+    }
+  }
 }
 ```
 
@@ -74,7 +78,7 @@ Fields:
 - `project_key`: generated DSS project key the agent should work in
 - `prompt`: natural-language task for the agent
 - `sources`: source datasets already copied into the generated project
-- `workspace`: local directory the agent may use for tooling, scripts, or scaffolding; this is either the configured `agent_workspace` or a temporary isolated workspace
+- `workspace`: local directory the agent may use for tooling, scripts, or scaffolding; this is either the profile's configured `agent_workspace` or a temporary isolated workspace
 
 ## Response JSON
 
