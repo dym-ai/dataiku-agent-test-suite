@@ -4,15 +4,14 @@
 Usage:
     python run_test.py --list-cases
     python run_test.py --describe-case dates
-    python run_test.py dates
-    python run_test.py dates --agent codex
+    python run_test.py --list-profiles
+    python run_test.py dates --profile codex-vanilla
     python run_test.py dates --keep
 
 Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
 
 import argparse
-import json
 import os
 import shlex
 import sys
@@ -22,28 +21,13 @@ import dataikuapi
 import urllib3
 
 from evals import DEFAULT_EVALS, describe_case, list_cases
+from suite.profiles import list_profiles, resolve_profile
 from suite.runner import run_case
 
 
 BUILTIN_AGENTS = {"claude", "codex"}
 REPO_ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = REPO_ROOT / ".dataiku-agent-suite.json"
-DEFAULT_SETTINGS = {
-    "agent_command": None,
-    "keep": False,
-    "verbose": False,
-    "agent_workspace": None,
-    "artifacts_dir": None,
-    "agent_timeout_seconds": 900,
-}
-CONFIG_KEYS = {
-    "agent_command",
-    "keep",
-    "verbose",
-    "agent_workspace",
-    "artifacts_dir",
-    "agent_timeout_seconds",
-}
 
 
 def _resolve_agent_command(agent_name):
@@ -70,98 +54,36 @@ def _configure_ssl_verify(client):
     client._session.verify = ssl_verify
 
 
-def _load_repo_config():
-    if not CONFIG_PATH.is_file():
-        return {}
-
-    try:
-        raw_config = json.loads(CONFIG_PATH.read_text())
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in {CONFIG_PATH}: {exc}") from exc
-
-    if not isinstance(raw_config, dict):
-        raise ValueError(f"{CONFIG_PATH} must contain a JSON object")
-
-    unknown_keys = sorted(set(raw_config) - CONFIG_KEYS)
-    if unknown_keys:
-        raise ValueError(f"{CONFIG_PATH} contains unsupported keys: {', '.join(unknown_keys)}")
-
-    config = {}
-    if "agent_command" in raw_config:
-        config["agent_command"] = _require_string(raw_config["agent_command"], "agent_command")
-    if "keep" in raw_config:
-        config["keep"] = _require_bool(raw_config["keep"], "keep")
-    if "verbose" in raw_config:
-        config["verbose"] = _require_bool(raw_config["verbose"], "verbose")
-    if "agent_workspace" in raw_config:
-        config["agent_workspace"] = _resolve_directory_config_path(raw_config["agent_workspace"], "agent_workspace")
-    if "artifacts_dir" in raw_config:
-        config["artifacts_dir"] = _resolve_config_path(raw_config["artifacts_dir"], "artifacts_dir")
-    if "agent_timeout_seconds" in raw_config:
-        config["agent_timeout_seconds"] = _require_positive_int(
-            raw_config["agent_timeout_seconds"],
-            "agent_timeout_seconds",
+def _resolve_settings(args):
+    if not args.profile:
+        raise ValueError(
+            "No profile configured. Pass --profile, and define that profile in .dataiku-agent-suite.json."
         )
 
-    return config
+    settings = resolve_profile(CONFIG_PATH, args.profile)
 
-
-def _require_string(value, field_name):
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{CONFIG_PATH}: '{field_name}' must be a non-empty string")
-    return value
-
-
-def _require_bool(value, field_name):
-    if not isinstance(value, bool):
-        raise ValueError(f"{CONFIG_PATH}: '{field_name}' must be true or false")
-    return value
-
-
-def _require_positive_int(value, field_name):
-    if not isinstance(value, int) or value <= 0:
-        raise ValueError(f"{CONFIG_PATH}: '{field_name}' must be a positive integer")
-    return value
-
-
-def _resolve_config_path(value, field_name):
-    raw_path = _require_string(value, field_name)
-    return (CONFIG_PATH.parent / raw_path).resolve()
-
-
-def _resolve_directory_config_path(value, field_name):
-    return _require_directory(_resolve_config_path(value, field_name), f"{CONFIG_PATH}: '{field_name}'")
-
-
-def _require_directory(path, label):
-    if not path.exists():
-        raise ValueError(f"{label} does not exist: {path}")
-    if not path.is_dir():
-        raise ValueError(f"{label} must be a directory: {path}")
-    return path
-
-
-def _resolve_settings(args):
-    settings = dict(DEFAULT_SETTINGS)
-    settings.update(_load_repo_config())
-
-    if args.agent is not None:
-        settings["agent_command"] = args.agent
     if args.keep is not None:
         settings["keep"] = args.keep
     if args.verbose is not None:
         settings["verbose"] = args.verbose
-    if args.agent_workspace is not None:
-        settings["agent_workspace"] = _require_directory(
-            Path(args.agent_workspace).resolve(),
-            "--agent-workspace",
-        )
     if args.artifacts_dir is not None:
         settings["artifacts_dir"] = Path(args.artifacts_dir).resolve()
     if args.agent_timeout_seconds is not None:
         settings["agent_timeout_seconds"] = args.agent_timeout_seconds
 
     return settings
+
+
+def _print_profile_list():
+    profiles = list_profiles(CONFIG_PATH)
+    if not profiles:
+        print(f"No profiles configured in {CONFIG_PATH}")
+        return
+
+    print("Available profiles")
+    for profile in profiles:
+        description = profile["description"] or "(no description)"
+        print(f"- {profile['name']}: {description}")
 
 
 def _print_case_list():
@@ -201,30 +123,45 @@ def _print_case_description(case_name):
 
 def run(
     case_name,
-    agent_name,
+    agent_command,
     keep=False,
     agent_workspace=None,
     verbose=False,
     artifacts_dir=None,
     agent_timeout_seconds=900,
+    env=None,
 ):
-    url = os.environ["DATAIKU_URL"]
-    key = os.environ["DATAIKU_API_KEY"]
-    client = dataikuapi.DSSClient(url, key)
-    _configure_ssl_verify(client)
+    if env:
+        previous_values = {name: os.environ.get(name) for name in env}
+        os.environ.update(env)
+    else:
+        previous_values = None
 
-    return run_case(
-        client,
-        url,
-        case_name,
-        agent_command=_resolve_agent_command(agent_name),
-        keep=keep,
-        agent_workspace=agent_workspace,
-        verbose=verbose,
-        artifacts_dir=artifacts_dir,
-        agent_timeout_seconds=agent_timeout_seconds,
-        repo_root=REPO_ROOT,
-    )
+    try:
+        url = os.environ["DATAIKU_URL"]
+        key = os.environ["DATAIKU_API_KEY"]
+        client = dataikuapi.DSSClient(url, key)
+        _configure_ssl_verify(client)
+
+        return run_case(
+            client,
+            url,
+            case_name,
+            agent_command=_resolve_agent_command(agent_command),
+            keep=keep,
+            agent_workspace=agent_workspace,
+            verbose=verbose,
+            artifacts_dir=artifacts_dir,
+            agent_timeout_seconds=agent_timeout_seconds,
+            repo_root=REPO_ROOT,
+        )
+    finally:
+        if previous_values is not None:
+            for name, value in previous_values.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 if __name__ == "__main__":
@@ -232,15 +169,13 @@ if __name__ == "__main__":
     parser.add_argument("case_name", nargs="?")
     parser.add_argument("--list-cases", action="store_true", help="List available cases and exit")
     parser.add_argument("--describe-case", metavar="CASE_NAME", help="Show case details and exit")
+    parser.add_argument("--list-profiles", action="store_true", help="List configured profiles and exit")
+    parser.add_argument("--profile", help="Named profile from .dataiku-agent-suite.json")
     parser.add_argument(
         "--keep",
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Keep the generated project after validation",
-    )
-    parser.add_argument(
-        "--agent-workspace",
-        help="Workspace for the agent to use (defaults to a temporary isolated directory)",
     )
     parser.add_argument(
         "--verbose",
@@ -258,7 +193,6 @@ if __name__ == "__main__":
         default=None,
         help="Maximum time to wait for the agent process before aborting it (default: 900)",
     )
-    parser.add_argument("--agent", help="Agent to run (defaults to config when available)")
     args = parser.parse_args()
 
     try:
@@ -270,25 +204,25 @@ if __name__ == "__main__":
             _print_case_description(args.describe_case)
             sys.exit(0)
 
+        if args.list_profiles:
+            _print_profile_list()
+            sys.exit(0)
+
         if not args.case_name:
-            parser.error("Provide a case name, or use --list-cases / --describe-case.")
+            parser.error("Provide a case name, or use --list-cases / --describe-case / --list-profiles.")
 
         settings = _resolve_settings(args)
     except Exception as exc:
         parser.error(str(exc))
 
-    if not settings.get("agent_command"):
-        parser.error(
-            "No agent configured. Pass --agent, or set 'agent_command' in .dataiku-agent-suite.json."
-        )
-
     result = run(
         args.case_name,
-        agent_name=settings["agent_command"],
+        agent_command=settings["agent_command"],
         keep=settings["keep"],
         agent_workspace=settings["agent_workspace"],
         verbose=settings["verbose"],
         artifacts_dir=settings["artifacts_dir"],
         agent_timeout_seconds=settings["agent_timeout_seconds"],
+        env=settings["env"],
     )
     sys.exit(0 if result["passed"] else 1)

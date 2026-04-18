@@ -1,8 +1,25 @@
 {
-  "agent_command": "codex",
-  "agent_workspace": "/path/to/your-agent-repo",
-  "artifacts_dir": "./artifacts",
-  "agent_timeout_seconds": 900,
-  "keep": false,
-  "verbose": false
+  "defaults": {
+    "artifacts_dir": "./artifacts",
+    "agent_timeout_seconds": 900,
+    "keep": false,
+    "verbose": false,
+    "env": {
+      "DATAIKU_URL": "${DATAIKU_URL}",
+      "DATAIKU_API_KEY": "${DATAIKU_API_KEY}"
+    }
+  },
+  "profiles": {
+    "codex-vanilla": {
+      "description": "Plain Codex baseline with no specialized workspace",
+      "agent_command": "codex",
+      "tags": ["codex", "vanilla"]
+    },
+    "repo-codex": {
+      "description": "Codex using an external repo workspace",
+      "agent_command": "codex",
+      "agent_workspace": "/path/to/your-agent-repo",
+      "tags": ["codex", "repo"]
+    }
+  }
 }
