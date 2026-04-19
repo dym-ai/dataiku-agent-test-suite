@@ -70,19 +70,19 @@ Optional:
 The basic command is:
 
 ```bash
-python run_test.py <case_name> --profile <profile_name>
+python run_test.py run <case_name> --profile <profile_name>
 ```
 
 If you prefer not to repeat the same flags every time, you can start from [`.dataiku-agent-suite.example.json`](.dataiku-agent-suite.example.json), create a local `.dataiku-agent-suite.json`, and then run:
 
 ```bash
-python run_test.py <case_name> --profile codex-vanilla
+python run_test.py run <case_name> --profile codex-vanilla
 ```
 
 Example with the built-in `dates` case and the bundled Codex wrapper:
 
 ```bash
-python run_test.py dates --profile codex-vanilla
+python run_test.py run dates --profile codex-vanilla
 ```
 
 Example config:
@@ -112,7 +112,7 @@ Example config:
 With `.dataiku-agent-suite.json` in the repository root, the command becomes:
 
 ```bash
-python run_test.py dates --profile repo-codex
+python run_test.py run dates --profile repo-codex
 ```
 
 Profiles define which agent command to run and, optionally, which external workspace that profile should use.
@@ -146,13 +146,13 @@ Common add-ons:
 Keep the generated DSS project after validation:
 
 ```bash
-python run_test.py dates --profile codex-vanilla --keep
+python run_test.py run dates --profile codex-vanilla --keep
 ```
 
 Write the full run bundle to disk:
 
 ```bash
-python run_test.py dates \
+python run_test.py run dates \
   --profile codex-vanilla \
   --artifacts-dir /path/to/output-artifacts
 ```
@@ -160,21 +160,21 @@ python run_test.py dates \
 Show agent stdout/stderr excerpts in the terminal report:
 
 ```bash
-python run_test.py dates --profile codex-vanilla --verbose
+python run_test.py run dates --profile codex-vanilla --verbose
 ```
 
 Use a custom agent script or wrapper:
 
 ```bash
-python run_test.py dates --profile custom-agent
+python run_test.py run dates --profile custom-agent
 ```
 
 See what is available before you run anything:
 
 ```bash
-python run_test.py --list-cases
-python run_test.py --describe-case dates
-python run_test.py --list-profiles
+python run_test.py list-cases
+python run_test.py describe-case dates
+python run_test.py list-profiles
 ```
 
 ## How A Run Works
@@ -270,14 +270,14 @@ If `--keep` is also set, the report includes the DSS project URL.
 
 Supported flags:
 
-- `--list-cases`: show available cases and exit
-- `--describe-case`: show the details of one case and exit
-- `--list-profiles`: show configured profiles and exit
-- `--profile`: profile name from `.dataiku-agent-suite.json`
-- `--keep` / `--no-keep`: keep or discard the generated DSS project after validation
-- `--verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
-- `--artifacts-dir`: write request/response/report files to disk
-- `--agent-timeout-seconds`: abort the agent process after a timeout; default `900`
+- `list-cases`: show available cases and exit
+- `describe-case <case>`: show the details of one case and exit
+- `list-profiles`: show configured profiles and exit
+- `run <case> --profile <name>`: run one case against one profile
+- `run ... --keep` / `--no-keep`: keep or discard the generated DSS project after validation
+- `run ... --verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
+- `run ... --artifacts-dir`: write request/response/report files to disk
+- `run ... --agent-timeout-seconds`: abort the agent process after a timeout; default `900`
 
 ## Reference
 

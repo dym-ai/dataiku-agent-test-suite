@@ -2,11 +2,11 @@
 """Run a case against a CLI agent.
 
 Usage:
-    python run_test.py --list-cases
-    python run_test.py --describe-case dates
-    python run_test.py --list-profiles
-    python run_test.py dates --profile codex-vanilla
-    python run_test.py dates --keep
+    python run_test.py list-cases
+    python run_test.py describe-case dates
+    python run_test.py list-profiles
+    python run_test.py run dates --profile codex-vanilla
+    python run_test.py run dates --profile codex-vanilla --keep
 
 Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
@@ -166,28 +166,35 @@ def run(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run or inspect Dataiku agent evaluation cases")
-    parser.add_argument("case_name", nargs="?")
-    parser.add_argument("--list-cases", action="store_true", help="List available cases and exit")
-    parser.add_argument("--describe-case", metavar="CASE_NAME", help="Show case details and exit")
-    parser.add_argument("--list-profiles", action="store_true", help="List configured profiles and exit")
-    parser.add_argument("--profile", help="Named profile from .dataiku-agent-suite.json")
-    parser.add_argument(
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("list-cases", help="List available cases and exit")
+
+    describe_parser = subparsers.add_parser("describe-case", help="Show one case and exit")
+    describe_parser.add_argument("case_name")
+
+    subparsers.add_parser("list-profiles", help="List configured profiles and exit")
+
+    run_parser = subparsers.add_parser("run", help="Run one case against one profile")
+    run_parser.add_argument("case_name")
+    run_parser.add_argument("--profile", required=True, help="Named profile from .dataiku-agent-suite.json")
+    run_parser.add_argument(
         "--keep",
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Keep the generated project after validation",
     )
-    parser.add_argument(
+    run_parser.add_argument(
         "--verbose",
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Show raw agent stdout/stderr excerpts in the report",
     )
-    parser.add_argument(
+    run_parser.add_argument(
         "--artifacts-dir",
         help="Directory where full request/response/report artifacts should be written",
     )
-    parser.add_argument(
+    run_parser.add_argument(
         "--agent-timeout-seconds",
         type=int,
         default=None,
@@ -196,20 +203,20 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        if args.list_cases:
+        if args.command == "list-cases":
             _print_case_list()
             sys.exit(0)
 
-        if args.describe_case:
-            _print_case_description(args.describe_case)
+        if args.command == "describe-case":
+            _print_case_description(args.case_name)
             sys.exit(0)
 
-        if args.list_profiles:
+        if args.command == "list-profiles":
             _print_profile_list()
             sys.exit(0)
 
-        if not args.case_name:
-            parser.error("Provide a case name, or use --list-cases / --describe-case / --list-profiles.")
+        if args.command != "run":
+            parser.error("Choose a subcommand: run, list-cases, describe-case, or list-profiles.")
 
         settings = _resolve_settings(args)
     except Exception as exc:
