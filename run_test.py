@@ -12,12 +12,10 @@ Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
 
 import argparse
-from contextlib import contextmanager
 import json
 import os
 import shlex
 import sys
-import tempfile
 from pathlib import Path
 
 import dataikuapi
@@ -27,6 +25,7 @@ from evals import DEFAULT_EVALS, describe_case, list_cases, setup, teardown, val
 from suite.protocol import build_request, run_agent_command
 from suite.redaction import redact_text, redact_value
 from suite.report import format_report
+from suite.workspaces import stage_agent_workspace
 
 
 BUILTIN_AGENTS = {"claude", "codex"}
@@ -191,18 +190,6 @@ def _warn_if_workspace_is_repo_visible(agent_workspace):
         print(f"         Workspace: {agent_workspace}", file=sys.stderr)
 
 
-@contextmanager
-def _resolved_agent_workspace(agent_workspace):
-    if agent_workspace is not None:
-        resolved_workspace = agent_workspace.resolve()
-        _warn_if_workspace_is_repo_visible(resolved_workspace)
-        yield resolved_workspace, False
-        return
-
-    with tempfile.TemporaryDirectory(prefix="dataiku-agent-workspace-") as temp_dir:
-        yield Path(temp_dir).resolve(), True
-
-
 def _print_case_list():
     cases = list_cases()
     print("Available cases")
@@ -304,18 +291,24 @@ def run(
     print(f"    Sources: {case['sources']}")
 
     try:
-        with _resolved_agent_workspace(agent_workspace) as (resolved_workspace, is_temporary_workspace):
-            workspace_label = "temporary isolated workspace" if is_temporary_workspace else "configured agent workspace"
-            print(f"    Agent workspace: {resolved_workspace} ({workspace_label})")
+        if agent_workspace is not None:
+            _warn_if_workspace_is_repo_visible(agent_workspace.resolve())
+
+        with stage_agent_workspace(agent_workspace) as staged_workspace:
+            if staged_workspace.is_copy:
+                print(f"    Source workspace: {staged_workspace.source_workspace}")
+                print(f"    Run workspace: {staged_workspace.run_workspace} (temporary isolated copy)")
+            else:
+                print(f"    Run workspace: {staged_workspace.run_workspace} (temporary isolated workspace)")
 
             agent_command = _resolve_agent_command(agent_name)
             print(f"\n--- Running agent...")
-            request = build_request(case_name, case, workspace=resolved_workspace)
+            request = build_request(case_name, case, workspace=staged_workspace.run_workspace)
             agent_result = run_agent_command(
                 agent_command,
                 request,
                 timeout_seconds=agent_timeout_seconds,
-                cwd=resolved_workspace,
+                cwd=staged_workspace.run_workspace,
             )
             print(redact_text(agent_result.get("summary", "Agent completed")))
 

@@ -25,9 +25,11 @@ the harness invokes:
 python /path/to/my_agent.py --request /tmp/request.json --response /tmp/response.json
 ```
 
-`--agent-workspace` is not forwarded on the command line. The resolved workspace path is included in the request JSON instead, and the agent can decide whether to use it as its working directory.
+`--agent-workspace` is not forwarded on the command line. The harness stages a temporary run workspace first, then includes that staged workspace path in the request JSON so the agent can use it as its working directory.
 
 If no `agent_workspace` is configured, the harness creates a temporary isolated workspace for the run.
+
+If `agent_workspace` is configured, the harness copies that source workspace into a temporary isolated run workspace for the run. The source workspace is not used in place.
 
 Avoid pointing `agent_workspace` at the harness repository itself, because that can expose case definitions and evaluator logic to the agent.
 
@@ -74,7 +76,7 @@ Fields:
 - `project_key`: generated DSS project key the agent should work in
 - `prompt`: natural-language task for the agent
 - `sources`: source datasets already copied into the generated project
-- `workspace`: local directory the agent may use for tooling, scripts, or scaffolding; this is either the configured `agent_workspace` or a temporary isolated workspace
+- `workspace`: local directory the agent may use for tooling, scripts, or scaffolding; this is the staged temporary run workspace created by the harness, either empty or copied from the configured `agent_workspace`
 
 ## Response JSON
 

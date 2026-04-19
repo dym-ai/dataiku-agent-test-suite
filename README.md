@@ -104,7 +104,9 @@ python run_test.py dates
 
 For real use, it is strongly recommended to point `agent_workspace` at your own agent repository, where your tools, skills, and scripts live.
 
-If you do not set `agent_workspace`, the harness creates a fresh temporary workspace for each run so the agent does not get access to this harness repo by default.
+If you do not set `agent_workspace`, the harness creates a fresh empty temporary workspace for each run so the agent does not get access to this harness repo by default.
+
+If you do set `agent_workspace`, the harness now treats it as a source workspace. For each run, it copies that directory into a temporary isolated run workspace and executes the agent in the copy. The source workspace is not used in place.
 
 Avoid pointing `agent_workspace` at this harness repo, because that can expose case definitions and evaluator logic to the agent.
 
@@ -123,7 +125,7 @@ Common add-ons:
 - `--keep` to keep the generated DSS project so you can inspect it
 - `--verbose` to show agent stdout and stderr excerpts in the report
 - `--artifacts-dir /path/to/output-artifacts` to write the full run bundle to disk
-- `--agent-workspace /path/to/agent-workspace` to point the agent at your own repo or tools directory
+- `--agent-workspace /path/to/agent-workspace` to point the agent at your own repo or tools directory; the harness will copy it into a temporary isolated run workspace
 
 Keep the generated DSS project after validation:
 
@@ -138,6 +140,8 @@ python run_test.py dates \
   --agent codex \
   --agent-workspace /path/to/agent-workspace
 ```
+
+That source workspace is copied into a temporary run workspace for the duration of the run and then discarded after completion.
 
 Write the full run bundle to disk:
 
