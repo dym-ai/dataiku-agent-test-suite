@@ -103,6 +103,7 @@ def setup(client, case_name):
         "project_key": project_key,
         "prompt": case["prompt"],
         "sources": copied_names,
+        "case_path": str(case_path),
     }
 
 

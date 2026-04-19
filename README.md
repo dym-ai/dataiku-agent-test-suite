@@ -27,7 +27,7 @@ A typical successful run gives you a short terminal report with:
 - **Check results**: which validations passed or failed
 - **Agent summary**: a short human-readable summary from the agent
 
-If you use `--artifacts-dir`, the harness also writes the full request, agent response, validation result, and report to disk for later inspection. Persisted agent output is sanitized to redact secrets before it is written.
+If you use `--artifacts-dir`, the harness also writes a self-contained run bundle to disk for later inspection. Persisted agent output is sanitized to redact secrets before it is written.
 
 <details>
 <summary>Example terminal report</summary>
@@ -255,14 +255,28 @@ The terminal report includes:
 - agent stats when available
 - a short agent summary
 
-With `--artifacts-dir`, each run writes a subdirectory named after the generated project key containing:
+With `--artifacts-dir`, each run writes a dedicated run bundle containing:
 
 - `request.json`
 - `agent_response.json`
 - `validation_result.json`
+- `run_manifest.json`
 - `report.txt`
 - `agent_stdout.txt`
 - `agent_stderr.txt`
+
+The run manifest records the stable run metadata:
+
+- run id and timestamps
+- case name and case file path
+- profile name and profile digest
+- DSS instance URL
+- source workspace and staged run workspace
+- project key and whether the DSS project was kept
+- execution summary such as status, return code, timeout, duration, tokens, and tool use
+- validation summary such as check counts and overall evaluator pass/fail
+
+The persisted `validation_result.json` contains evaluator output only. Basic harness execution checks such as agent status and return code are summarized separately in `run_manifest.json`.
 
 Persisted agent output and verbose report excerpts are sanitized to redact exact environment secret values and common auth patterns such as bearer tokens and `*_api_key` fields.
 
