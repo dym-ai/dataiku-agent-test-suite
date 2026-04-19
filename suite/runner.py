@@ -1,11 +1,12 @@
 """Single-run orchestration helpers."""
 
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from evals import setup, teardown, validate
 
-from .artifacts import write_run_artifacts
+from .artifacts import summarize_execution_result, write_run_artifacts
 from .protocol import build_request, run_agent_command
 from .redaction import redact_text
 from .report import format_report
@@ -19,6 +20,10 @@ def run_case(
     agent_command,
     keep=False,
     agent_workspace=None,
+    profile_name=None,
+    profile_description="",
+    profile_tags=None,
+    profile_env_keys=None,
     verbose=False,
     artifacts_dir=None,
     agent_timeout_seconds=900,
@@ -26,6 +31,7 @@ def run_case(
 ):
     """Run one case against one agent command and return the validation result."""
     print(f"--- Setting up case: {case_name}")
+    started_at = datetime.now(timezone.utc)
     try:
         case = setup(client, case_name)
     except Exception as exc:
@@ -52,17 +58,19 @@ def run_case(
                 timeout_seconds=agent_timeout_seconds,
                 cwd=staged_workspace.run_workspace,
             )
+            finished_at = datetime.now(timezone.utc)
             print(redact_text(agent_result.get("summary", "Agent completed")))
 
             print("\n--- Validating...")
-            result = validate(
+            validation_result = validate(
                 client,
                 case_name,
                 case["project_key"],
                 agent_stats=agent_result.get("stats"),
                 tool_trace=agent_result.get("tool_trace"),
             )
-            result = apply_agent_outcome_checks(result, agent_result)
+            execution_result = summarize_execution_result(agent_result)
+            result = apply_agent_outcome_checks(validation_result, agent_result)
             artifact_path = None
             report_text = format_report(
                 case_name,
@@ -75,11 +83,29 @@ def run_case(
             if artifacts_dir:
                 artifact_path = write_run_artifacts(
                     artifacts_dir,
-                    case["project_key"],
-                    request,
-                    agent_result,
-                    result,
-                    report_text,
+                    case_name=case_name,
+                    case_path=case["case_path"],
+                    project_key=case["project_key"],
+                    profile={
+                        "name": profile_name or agent_command,
+                        "description": profile_description,
+                        "agent_command": agent_command,
+                        "agent_workspace": agent_workspace,
+                        "tags": list(profile_tags or []),
+                        "dss_url": base_url.rstrip("/"),
+                        "env_keys": list(profile_env_keys or []),
+                    },
+                    request=request,
+                    agent_result=agent_result,
+                    execution_result=execution_result,
+                    validation_result=validation_result,
+                    overall_passed=result["passed"],
+                    report_text=report_text,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    staged_workspace=staged_workspace,
+                    keep=keep,
+                    harness_repo_root=repo_root,
                 )
                 report_text = format_report(
                     case_name,
