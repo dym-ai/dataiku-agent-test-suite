@@ -7,6 +7,7 @@ Usage:
     python run_test.py list-profiles
     python run_test.py run dates --profile codex-vanilla
     python run_test.py run dates --profile codex-vanilla --keep
+    python run_test.py batch --cases dates crane --profiles codex-vanilla cli-codex
 
 Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
@@ -21,6 +22,7 @@ import dataikuapi
 import urllib3
 
 from evals import DEFAULT_EVALS, describe_case, list_cases
+from suite.batch import run_batch
 from suite.profiles import list_profiles, resolve_profile
 from suite.runner import run_case
 
@@ -54,13 +56,8 @@ def _configure_ssl_verify(client):
     client._session.verify = ssl_verify
 
 
-def _resolve_settings(args):
-    if not args.profile:
-        raise ValueError(
-            "No profile configured. Pass --profile, and define that profile in .dataiku-agent-suite.json."
-        )
-
-    settings = resolve_profile(CONFIG_PATH, args.profile)
+def _apply_run_overrides(settings, args):
+    settings = dict(settings)
 
     if args.keep is not None:
         settings["keep"] = args.keep
@@ -72,6 +69,16 @@ def _resolve_settings(args):
         settings["agent_timeout_seconds"] = args.agent_timeout_seconds
 
     return settings
+
+
+def _resolve_profile_settings(profile_name, args):
+    if not profile_name:
+        raise ValueError(
+            "No profile configured. Pass --profile, and define that profile in .dataiku-agent-suite.json."
+        )
+
+    settings = resolve_profile(CONFIG_PATH, profile_name)
+    return _apply_run_overrides(settings, args)
 
 
 def _print_profile_list():
@@ -172,6 +179,26 @@ def run(
                     os.environ[name] = value
 
 
+def batch(cases, profiles, artifacts_dir=None):
+    def run_one(case_name, settings, child_artifacts_root):
+        return run(
+            case_name,
+            agent_command=settings["agent_command"],
+            keep=settings["keep"],
+            agent_workspace=settings["agent_workspace"],
+            profile_name=settings["profile_name"],
+            profile_description=settings["description"],
+            profile_tags=settings["tags"],
+            profile_env_keys=sorted((settings["env"] or {}).keys()),
+            verbose=settings["verbose"],
+            artifacts_dir=child_artifacts_root if child_artifacts_root is not None else artifacts_dir,
+            agent_timeout_seconds=settings["agent_timeout_seconds"],
+            env=settings["env"],
+        )
+
+    return run_batch(run_one, cases, profiles, artifacts_root=artifacts_dir)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run or inspect Dataiku agent evaluation cases")
     subparsers = parser.add_subparsers(dest="command")
@@ -208,6 +235,32 @@ if __name__ == "__main__":
         default=None,
         help="Maximum time to wait for the agent process before aborting it (default: 900)",
     )
+
+    batch_parser = subparsers.add_parser("batch", help="Run multiple cases against multiple profiles sequentially")
+    batch_parser.add_argument("--cases", nargs="+", required=True, help="One or more case names")
+    batch_parser.add_argument("--profiles", nargs="+", required=True, help="One or more profile names")
+    batch_parser.add_argument(
+        "--keep",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Keep the generated projects after validation",
+    )
+    batch_parser.add_argument(
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Show raw agent stdout/stderr excerpts in the terminal report",
+    )
+    batch_parser.add_argument(
+        "--artifacts-dir",
+        help="Directory where batch and child run artifacts should be written",
+    )
+    batch_parser.add_argument(
+        "--agent-timeout-seconds",
+        type=int,
+        default=None,
+        help="Maximum time to wait for each agent process before aborting it (default: 900)",
+    )
     args = parser.parse_args()
 
     try:
@@ -223,25 +276,34 @@ if __name__ == "__main__":
             _print_profile_list()
             sys.exit(0)
 
-        if args.command != "run":
-            parser.error("Choose a subcommand: run, list-cases, describe-case, or list-profiles.")
-
-        settings = _resolve_settings(args)
+        if args.command == "run":
+            settings = _resolve_profile_settings(args.profile, args)
+        elif args.command == "batch":
+            settings = [_resolve_profile_settings(profile_name, args) for profile_name in args.profiles]
+        else:
+            parser.error("Choose a subcommand: run, batch, list-cases, describe-case, or list-profiles.")
     except Exception as exc:
         parser.error(str(exc))
 
-    result = run(
-        args.case_name,
-        agent_command=settings["agent_command"],
-        keep=settings["keep"],
-        agent_workspace=settings["agent_workspace"],
-        profile_name=settings["profile_name"],
-        profile_description=settings["description"],
-        profile_tags=settings["tags"],
-        profile_env_keys=sorted((settings["env"] or {}).keys()),
-        verbose=settings["verbose"],
-        artifacts_dir=settings["artifacts_dir"],
-        agent_timeout_seconds=settings["agent_timeout_seconds"],
-        env=settings["env"],
-    )
+    if args.command == "run":
+        result = run(
+            args.case_name,
+            agent_command=settings["agent_command"],
+            keep=settings["keep"],
+            agent_workspace=settings["agent_workspace"],
+            profile_name=settings["profile_name"],
+            profile_description=settings["description"],
+            profile_tags=settings["tags"],
+            profile_env_keys=sorted((settings["env"] or {}).keys()),
+            verbose=settings["verbose"],
+            artifacts_dir=settings["artifacts_dir"],
+            agent_timeout_seconds=settings["agent_timeout_seconds"],
+            env=settings["env"],
+        )
+    else:
+        result = batch(
+            args.cases,
+            settings,
+            artifacts_dir=settings[0]["artifacts_dir"] if settings else None,
+        )
     sys.exit(0 if result["passed"] else 1)

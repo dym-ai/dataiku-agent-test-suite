@@ -181,6 +181,12 @@ python run_test.py describe-case dates
 python run_test.py list-profiles
 ```
 
+Run a small case/profile matrix sequentially:
+
+```bash
+python run_test.py batch --cases dates crane --profiles codex-vanilla cli-codex
+```
+
 ## How A Run Works
 
 Each run has three stages:
@@ -278,6 +284,12 @@ The run manifest records the stable run metadata:
 
 The persisted `validation_result.json` contains evaluator output only. Basic harness execution checks such as agent status and return code are summarized separately in `run_manifest.json`.
 
+Batch runs write a self-contained batch directory containing:
+
+- `batch_manifest.json`
+- `report.txt`
+- `runs/` with the normal child run bundles
+
 Persisted agent output and verbose report excerpts are sanitized to redact exact environment secret values and common auth patterns such as bearer tokens and `*_api_key` fields.
 
 If `--keep` is also set, the report includes the DSS project URL.
@@ -292,6 +304,7 @@ Supported flags:
 - `describe-case <case>`: show the details of one case and exit
 - `list-profiles`: show configured profiles and exit
 - `run <case> --profile <name>`: run one case against one profile
+- `batch --cases ... --profiles ...`: run a case/profile matrix sequentially
 - `run ... --keep` / `--no-keep`: keep or discard the generated DSS project after validation
 - `run ... --verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
 - `run ... --artifacts-dir`: write request/response/report files to disk
