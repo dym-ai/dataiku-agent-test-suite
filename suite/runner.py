@@ -1,8 +1,6 @@
 """Single-run orchestration helpers."""
 
-from contextlib import contextmanager
 import sys
-import tempfile
 from pathlib import Path
 
 from evals import setup, teardown, validate
@@ -11,6 +9,7 @@ from .artifacts import write_run_artifacts
 from .protocol import build_request, run_agent_command
 from .redaction import redact_text
 from .report import format_report
+from .workspaces import stage_agent_workspace
 
 
 def run_case(
@@ -36,17 +35,22 @@ def run_case(
     print(f"    Sources: {case['sources']}")
 
     try:
-        with resolved_agent_workspace(agent_workspace, repo_root=repo_root) as (resolved_workspace, is_temporary_workspace):
-            workspace_label = "temporary isolated workspace" if is_temporary_workspace else "configured agent workspace"
-            print(f"    Agent workspace: {resolved_workspace} ({workspace_label})")
+        with stage_agent_workspace(agent_workspace) as staged_workspace:
+            if staged_workspace.source_workspace is not None:
+                warn_if_workspace_is_repo_visible(staged_workspace.source_workspace, repo_root)
+            if staged_workspace.is_copy:
+                print(f"    Source workspace: {staged_workspace.source_workspace}")
+                print(f"    Run workspace: {staged_workspace.run_workspace} (temporary isolated copy)")
+            else:
+                print(f"    Run workspace: {staged_workspace.run_workspace} (temporary isolated workspace)")
 
             print("\n--- Running agent...")
-            request = build_request(case_name, case, workspace=resolved_workspace)
+            request = build_request(case_name, case, workspace=staged_workspace.run_workspace)
             agent_result = run_agent_command(
                 agent_command,
                 request,
                 timeout_seconds=agent_timeout_seconds,
-                cwd=resolved_workspace,
+                cwd=staged_workspace.run_workspace,
             )
             print(redact_text(agent_result.get("summary", "Agent completed")))
 
@@ -161,16 +165,3 @@ def warn_if_workspace_is_repo_visible(agent_workspace, repo_root):
             file=sys.stderr,
         )
         print(f"         Workspace: {agent_workspace}", file=sys.stderr)
-
-
-@contextmanager
-def resolved_agent_workspace(agent_workspace, repo_root=None):
-    """Yield a resolved workspace path and whether it was created temporarily."""
-    if agent_workspace is not None:
-        resolved_workspace = agent_workspace.resolve()
-        warn_if_workspace_is_repo_visible(resolved_workspace, repo_root)
-        yield resolved_workspace, False
-        return
-
-    with tempfile.TemporaryDirectory(prefix="dataiku-agent-workspace-") as temp_dir:
-        yield Path(temp_dir).resolve(), True

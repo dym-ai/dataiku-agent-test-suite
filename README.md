@@ -119,7 +119,9 @@ Profiles define which agent command to run and, optionally, which external works
 
 For real use, it is strongly recommended to point `agent_workspace` at your own agent repository when you want the agent to work from a repo with tools, skills, and scripts.
 
-If you do not set `agent_workspace`, the harness creates a fresh temporary workspace for each run so the agent does not get access to this harness repo by default.
+If you do not set `agent_workspace`, the harness creates a fresh empty temporary workspace for each run so the agent does not get access to this harness repo by default.
+
+If you do set `agent_workspace`, the harness now treats it as a source workspace. For each run, it copies that directory into a temporary isolated run workspace and executes the agent in the copy. The source workspace is not used in place.
 
 Avoid pointing `agent_workspace` at this harness repo, because that can expose case definitions and evaluator logic to the agent.
 
@@ -148,6 +150,8 @@ Keep the generated DSS project after validation:
 ```bash
 python run_test.py run dates --profile codex-vanilla --keep
 ```
+
+That source workspace is copied into a temporary run workspace for the duration of the run and then discarded after completion.
 
 Write the full run bundle to disk:
 
