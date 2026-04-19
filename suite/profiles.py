@@ -24,7 +24,10 @@ def load_profile_config(config_path):
 
     unknown_keys = sorted(set(raw_config) - {"defaults", "profiles"})
     if unknown_keys:
-        raise ValueError(f"{config_path} contains unsupported keys: {', '.join(unknown_keys)}")
+        raise ValueError(
+            f"{config_path} contains unsupported top-level keys: {', '.join(unknown_keys)}. "
+            "Expected top-level keys: 'defaults' and 'profiles'."
+        )
 
     defaults = _validate_defaults(raw_config.get("defaults") or {}, config_path)
     profiles = _validate_profiles(raw_config.get("profiles") or {}, config_path)

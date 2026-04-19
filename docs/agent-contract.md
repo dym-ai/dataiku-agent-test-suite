@@ -16,7 +16,7 @@ The harness owns setup, validation, reporting, cleanup, and artifact writing. Th
 When you run:
 
 ```bash
-python run_test.py dates --profile custom-agent
+python run_test.py run dates --profile custom-agent
 ```
 
 the harness invokes:
@@ -41,7 +41,7 @@ Those wrappers are convenience adapters. They work if the underlying `codex` or 
 You can also use your own command instead of the bundled wrappers, for example:
 
 ```bash
-python run_test.py dates --profile custom-agent
+python run_test.py run dates --profile custom-agent
 ```
 
 or a repo-local config like:
