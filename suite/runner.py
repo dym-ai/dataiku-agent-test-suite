@@ -36,7 +36,15 @@ def run_case(
         case = setup(client, case_name)
     except Exception as exc:
         print(f"Setup failed: {exc}")
-        return {"passed": False, "stage": "setup", "error": str(exc)}
+        return {
+            "passed": False,
+            "stage": "setup",
+            "error": str(exc),
+            "artifact_dir": None,
+            "case_name": case_name,
+            "profile_name": profile_name or agent_command,
+            "project_key": None,
+        }
     print(f"    Project: {case['project_key']}")
     print(f"    Sources: {case['sources']}")
 
@@ -129,6 +137,11 @@ def run_case(
             except Exception as exc:
                 print(f"Cleanup failed for {case['project_key']}: {exc}")
 
+    result = dict(result)
+    result["artifact_dir"] = str(artifact_path) if artifact_path else None
+    result["case_name"] = case_name
+    result["profile_name"] = profile_name or agent_command
+    result["project_key"] = case["project_key"]
     return result
 
 
