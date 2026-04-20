@@ -8,6 +8,7 @@ Usage:
     python run_test.py run dates --profile codex-vanilla
     python run_test.py run dates --profile codex-vanilla --keep
     python run_test.py batch --cases dates crane --profiles codex-vanilla cli-codex
+    python run_test.py compare /path/to/run-a /path/to/run-b
 
 Requires DATAIKU_URL and DATAIKU_API_KEY environment variables.
 """
@@ -23,6 +24,7 @@ import urllib3
 
 from evals import DEFAULT_EVALS, describe_case, list_cases
 from suite.batch import run_batch
+from suite.compare import compare_artifact_dirs, is_batch_dir
 from suite.profiles import list_profiles, resolve_profile
 from suite.runner import run_case
 
@@ -199,6 +201,16 @@ def batch(cases, profiles, artifacts_dir=None):
     return run_batch(run_one, cases, profiles, artifacts_root=artifacts_dir)
 
 
+def compare(paths):
+    output_dir = None
+    if len(paths) == 1:
+        candidate = Path(paths[0]).resolve()
+        if is_batch_dir(candidate):
+            output_dir = candidate
+
+    return compare_artifact_dirs(paths, output_dir=output_dir)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run or inspect Dataiku agent evaluation cases")
     subparsers = parser.add_subparsers(dest="command")
@@ -261,6 +273,9 @@ if __name__ == "__main__":
         default=None,
         help="Maximum time to wait for each agent process before aborting it (default: 900)",
     )
+
+    compare_parser = subparsers.add_parser("compare", help="Compare one or more run/batch artifact directories")
+    compare_parser.add_argument("paths", nargs="+", help="Run bundle or batch artifact directories")
     args = parser.parse_args()
 
     try:
@@ -280,30 +295,39 @@ if __name__ == "__main__":
             settings = _resolve_profile_settings(args.profile, args)
         elif args.command == "batch":
             settings = [_resolve_profile_settings(profile_name, args) for profile_name in args.profiles]
+        elif args.command == "compare":
+            settings = None
         else:
-            parser.error("Choose a subcommand: run, batch, list-cases, describe-case, or list-profiles.")
+            parser.error("Choose a subcommand: run, batch, compare, list-cases, describe-case, or list-profiles.")
     except Exception as exc:
         parser.error(str(exc))
 
-    if args.command == "run":
-        result = run(
-            args.case_name,
-            agent_command=settings["agent_command"],
-            keep=settings["keep"],
-            agent_workspace=settings["agent_workspace"],
-            profile_name=settings["profile_name"],
-            profile_description=settings["description"],
-            profile_tags=settings["tags"],
-            profile_env_keys=sorted((settings["env"] or {}).keys()),
-            verbose=settings["verbose"],
-            artifacts_dir=settings["artifacts_dir"],
-            agent_timeout_seconds=settings["agent_timeout_seconds"],
-            env=settings["env"],
-        )
-    else:
-        result = batch(
-            args.cases,
-            settings,
-            artifacts_dir=settings[0]["artifacts_dir"] if settings else None,
-        )
+    try:
+        if args.command == "run":
+            result = run(
+                args.case_name,
+                agent_command=settings["agent_command"],
+                keep=settings["keep"],
+                agent_workspace=settings["agent_workspace"],
+                profile_name=settings["profile_name"],
+                profile_description=settings["description"],
+                profile_tags=settings["tags"],
+                profile_env_keys=sorted((settings["env"] or {}).keys()),
+                verbose=settings["verbose"],
+                artifacts_dir=settings["artifacts_dir"],
+                agent_timeout_seconds=settings["agent_timeout_seconds"],
+                env=settings["env"],
+            )
+        elif args.command == "batch":
+            result = batch(
+                args.cases,
+                settings,
+                artifacts_dir=settings[0]["artifacts_dir"] if settings else None,
+            )
+        else:
+            _, report_text = compare(args.paths)
+            print(report_text)
+            result = {"passed": True}
+    except Exception as exc:
+        parser.error(str(exc))
     sys.exit(0 if result["passed"] else 1)

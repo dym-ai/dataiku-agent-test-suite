@@ -187,6 +187,13 @@ Run a small case/profile matrix sequentially:
 python run_test.py batch --cases dates crane --profiles codex-vanilla cli-codex
 ```
 
+Compare saved run or batch artifact directories:
+
+```bash
+python run_test.py compare /path/to/run-a /path/to/run-b
+python run_test.py compare /path/to/batch__2026-04-20T...
+```
+
 ## How A Run Works
 
 Each run has three stages:
@@ -290,6 +297,11 @@ Batch runs write a self-contained batch directory containing:
 - `report.txt`
 - `runs/` with the normal child run bundles
 
+Single-case batches also write:
+
+- `compare_summary.json`
+- `compare_report.txt`
+
 Persisted agent output and verbose report excerpts are sanitized to redact exact environment secret values and common auth patterns such as bearer tokens and `*_api_key` fields.
 
 If `--keep` is also set, the report includes the DSS project URL.
@@ -305,6 +317,7 @@ Supported flags:
 - `list-profiles`: show configured profiles and exit
 - `run <case> --profile <name>`: run one case against one profile
 - `batch --cases ... --profiles ...`: run a case/profile matrix sequentially
+- `compare <dir> [<dir> ...]`: compare run bundle and/or batch artifact directories
 - `run ... --keep` / `--no-keep`: keep or discard the generated DSS project after validation
 - `run ... --verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
 - `run ... --artifacts-dir`: write request/response/report files to disk
