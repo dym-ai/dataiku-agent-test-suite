@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .compare import compare_artifact_dirs
+
 
 BATCH_ARTIFACT_SCHEMA_VERSION = 1
 
@@ -53,6 +55,8 @@ def run_batch(run_one, cases, profiles, artifacts_root=None):
             finished_at=finished_at,
             report_text=report_text,
         )
+        if len(cases) == 1 and len(run_entries) >= 2:
+            compare_artifact_dirs([batch_context["batch_dir"]], output_dir=batch_context["batch_dir"])
 
     print(f"\n{report_text}")
     return {
