@@ -1,91 +1,85 @@
 # Dataiku Agent Test Suite
 
-This repository lets you test whether an AI agent can complete a Dataiku task successfully.
+This repository is a benchmark harness for testing whether an AI agent or agentic system can complete Dataiku tasks successfully.
 
-You give the harness a test case and a configured profile. It creates a fresh Dataiku project, gives the task to the selected agent setup, and checks whether the final result matches the case.
+The harness is not the agent under test. You point it at:
 
-Your agent does not need to live in this repository. It can be Codex, Claude Code, another CLI agent, or your own wrapper script, as long as it can take a task from the harness and return a result.
+- a `case`: the task and expected outcome
+- a `profile`: the agent command and optional external workspace to benchmark
 
-## What This Repo Does
+The harness then creates a fresh DSS project, runs the agent, validates the result, and writes reports and artifacts.
 
-For each run, the harness:
+## What It Is
 
-1. Creates a new temporary project in Dataiku DSS.
-2. Copies in the source datasets needed for the test case.
-3. Runs your agent on the task.
-4. Checks the finished project against the case definition.
+Use this repo when you want to answer questions like:
 
-If the checks pass, the run passes. If they fail, the report shows what did not match.
+- can this agent build the expected Dataiku flow?
+- does one setup perform better than another on the same case?
+- which profiles pass or fail across a small benchmark set?
 
-### What You Get Back
+The harness stays neutral about how your agent is implemented. Your agent can live outside this repo and can be:
 
-A typical successful run gives you a short terminal report with:
+- the bundled `codex` or `claude` wrappers
+- your own CLI wrapper
+- a repo-backed agent setup with tools, MCP servers, skills, or scripts
 
-- **Case information**: the case name and generated Dataiku project
-- **Agent outcome**: whether the agent finished successfully
-- **Pass/fail result**: whether the run passed overall
-- **Check results**: which validations passed or failed
-- **Agent summary**: a short human-readable summary from the agent
+## How It Works
 
-If you use `--artifacts-dir`, the harness also writes a self-contained run bundle to disk for later inspection. Persisted agent output is sanitized to redact secrets before it is written.
+For each `run`, the harness:
 
-<details>
-<summary>Example terminal report</summary>
+1. Validates the selected case.
+2. Creates a fresh DSS project and copies the required source datasets into it.
+3. Stages a fresh run workspace:
+   - empty if the profile has no `agent_workspace`
+   - copied from the profile’s source workspace if `agent_workspace` is configured
+4. Invokes the agent through the file-based request/response contract.
+5. Validates the finished DSS project with the case’s evaluators.
+6. Prints a report and optionally writes artifacts.
 
-```text
-Case: dates
-Project: COBUILD_DATES_1772835245_A1B2C3D4
-Agent: completed
-Result: PASS
+The main execution shapes are:
 
-Checks
-- agent_returncode(expected 0, actual 0): PASS
-- agent_status(expected completed, actual completed): PASS
-- exists(Dates_with_expiration): PASS
-- schema_columns(Dates_with_expiration): PASS
-- schema_types(Dates_with_expiration): PASS
-- row_count(Dates_with_expiration, expected 1016, actual 1016): PASS
-```
+- `run`: one case against one profile
+- `batch`: multiple runs across a case/profile matrix
+- `compare`: artifact-based comparison of saved run bundles or batch directories
 
-</details>
+## Getting Started
 
-## Prerequisites
+### 1. Set up the environment
 
 You need:
 
-- Python with `dataikuapi` installed
-- A running Dataiku DSS instance
+- `uv`
+- a running Dataiku DSS instance
 - `DATAIKU_URL` and `DATAIKU_API_KEY` exported
-- An API key that can create and delete DSS projects
-- A source project on that DSS instance matching the case definition
-- Source datasets in that project that already contain data
-- A working agent CLI, or a custom agent command referenced by one of your profiles
+- an API key that can create and delete DSS projects
+- a source DSS project and datasets that match the selected case
+- an agent CLI or wrapper command to benchmark
+
+Built-in cases assume the required source datasets already exist in DSS.
+
+From the repo root, install the harness dependencies:
+
+```bash
+uv sync
+```
 
 Optional:
 
-- `DATAIKU_SSL_VERIFY=true|false|/path/to/ca-bundle.pem` if you need explicit TLS verification control
+- `DATAIKU_SSL_VERIFY=true|false|/path/to/ca-bundle.pem`
 
-## Quick Start
+### 2. Create a local profile config
 
-The basic command is:
-
-```bash
-python run_test.py run <case_name> --profile <profile_name>
-```
-
-If you prefer not to repeat the same flags every time, you can start from [`.dataiku-agent-suite.example.json`](.dataiku-agent-suite.example.json), create a local `.dataiku-agent-suite.json`, and then run:
+Create a local `.dataiku-agent-suite.json` in the repo root:
 
 ```bash
-python run_test.py run <case_name> --profile codex-vanilla
+cp .dataiku-agent-suite.example.json .dataiku-agent-suite.json
 ```
 
-Example with the built-in `dates` case and the bundled Codex wrapper:
+Then edit it to define the profiles you want to benchmark.
 
-```bash
-python run_test.py run dates --profile codex-vanilla
-```
+Each profile defines one setup to benchmark, such as a plain agent command or a repo-backed agent workspace.
 
-Example config:
+Minimal example:
 
 ```json
 {
@@ -109,240 +103,113 @@ Example config:
 }
 ```
 
-With `.dataiku-agent-suite.json` in the repository root, the command becomes:
+Notes:
+
+- `agent_command` is the command the harness launches.
+- `agent_workspace` is optional.
+- If `agent_workspace` is set, the harness copies it into a temporary isolated run workspace for each run.
+
+### 3. Inspect available cases and profiles
 
 ```bash
-python run_test.py run dates --profile repo-codex
+uv run python run_test.py list-cases
+uv run python run_test.py describe-case dates
+uv run python run_test.py list-profiles
 ```
 
-Profiles define which agent command to run and, optionally, which external workspace that profile should use.
-
-For real use, it is strongly recommended to point `agent_workspace` at your own agent repository when you want the agent to work from a repo with tools, skills, and scripts.
-
-If you do not set `agent_workspace`, the harness creates a fresh empty temporary workspace for each run so the agent does not get access to this harness repo by default.
-
-If you do set `agent_workspace`, the harness now treats it as a source workspace. For each run, it copies that directory into a temporary isolated run workspace and executes the agent in the copy. The source workspace is not used in place.
-
-Avoid pointing `agent_workspace` at this harness repo, because that can expose case definitions and evaluator logic to the agent.
-
-`agent_command` can point to the bundled shortcuts (`codex`, `claude`) or to your own command, such as:
-
-```json
-{
-  "profiles": {
-    "custom-agent": {
-      "agent_command": "python /path/to/my_agent.py"
-    }
-  }
-}
-```
-
-Command-line flags still override config values when you need a one-off change.
-
-Common add-ons:
-
-- `--keep` to keep the generated DSS project so you can inspect it
-- `--verbose` to show agent stdout and stderr excerpts in the report
-- `--artifacts-dir /path/to/output-artifacts` to write the full run bundle to disk
-
-Keep the generated DSS project after validation:
+### 4. Run one case
 
 ```bash
-python run_test.py run dates --profile codex-vanilla --keep
+uv run python run_test.py run dates --profile codex-vanilla
 ```
 
-That source workspace is copied into a temporary run workspace for the duration of the run and then discarded after completion.
+A successful `run` creates a fresh DSS project, executes the selected profile against the case, validates the result, and prints a report.
 
-Write the full run bundle to disk:
+Keep the generated DSS project so you can inspect it afterward:
 
 ```bash
-python run_test.py run dates \
-  --profile codex-vanilla \
-  --artifacts-dir /path/to/output-artifacts
+uv run python run_test.py run dates --profile repo-codex --keep
 ```
 
 Show agent stdout/stderr excerpts in the terminal report:
 
 ```bash
-python run_test.py run dates --profile codex-vanilla --verbose
+uv run python run_test.py run dates --profile codex-vanilla --verbose
 ```
 
-Use a custom agent script or wrapper:
+Write the full run bundle to disk:
 
 ```bash
-python run_test.py run dates --profile custom-agent
+uv run python run_test.py run dates --profile codex-vanilla --artifacts-dir ./artifacts
 ```
 
-See what is available before you run anything:
+### 5. Run a small batch
 
 ```bash
-python run_test.py list-cases
-python run_test.py describe-case dates
-python run_test.py list-profiles
+uv run python run_test.py batch --cases dates crane --profiles codex-vanilla repo-codex
 ```
 
-Run a small case/profile matrix sequentially:
+`batch` orchestrates multiple normal runs. It executes the full case/profile matrix sequentially and writes one batch directory with nested child run bundles when artifacts are enabled.
+
+### 6. Compare saved artifacts
 
 ```bash
-python run_test.py batch --cases dates crane --profiles codex-vanilla cli-codex
+uv run python run_test.py compare /path/to/run-a /path/to/run-b
+uv run python run_test.py compare /path/to/batch__2026-04-20T...
 ```
 
-Compare saved run or batch artifact directories:
-
-```bash
-python run_test.py compare /path/to/run-a /path/to/run-b
-python run_test.py compare /path/to/batch__2026-04-20T...
-```
-
-## How A Run Works
-
-Each run has three stages:
-
-1. `setup()` checks the case definition, creates a new DSS project, and copies the source datasets into it.
-2. The harness runs the selected profile's agent command with `--request <path>` and `--response <path>`.
-3. `validate()` checks the finished DSS project against the case's validation rules.
-
-If `--keep` is not set, the harness deletes the generated project at the end.
-
-By default, the harness keeps validation simple and focuses on the final output datasets:
-
-- required output datasets exist
-- schemas match
-- row counts match
-- sampled values match
-
-### Checking tool and skill usage
-
-You can assert that an agent used specific MCP tools or skills by adding evaluators to your case. 
-`skills_used` relies on `Skill` tool calls appearing in the agent's trace. The
-bundled Claude wrapper can emit these calls; the bundled Codex wrapper does not,
-so `skills_used` will be skipped rather than fail when no `Skill` calls are
-present.
-
-For example, to verify that an agent used the right skills and tools for the `dates` case, add this to the case.json. This assumes that you named your MCP server "dataiku-mcp" in your config:
-
-```json
-"evals": [
-  {"name": "output_datasets"},
-  {
-    "name": "tool_calls_include",
-    "tools": [
-      "mcp__dataiku-mcp__create_recipe",
-      "mcp__dataiku-mcp__get_recipe_settings",
-      "mcp__dataiku-mcp__set_recipe_settings"
-    ]
-  },
-  {
-    "name": "skills_used",
-    "skills": [
-      "recipes/SKILL.md",
-      "recipes/recipe-types/prepare/skill.md"
-    ]
-  }
-]
-```
-
-- `tool_calls_include` passes if every listed tool was called at least once.
-- `tool_calls_exclude` passes if none of the listed tools were called.
-- `skills_used` passes if every listed skill was invoked via the `Skill` tool.
-  If no `Skill` tool calls are present in the trace, the check is skipped.
-
-The tool name format is `mcp__{server}__{tool}`. Both bundled wrappers emit a `tool_trace` automatically. For cross-agent compatibility, make sure the MCP server is registered under the same name in both agents (e.g. `dataiku-mcp`).
-
-## Running Tests
-
-The repository test suite currently uses Python's built-in `unittest` runner:
-
-```bash
-python -m unittest discover -s tests -v
-```
+`compare` reads saved artifact directories from earlier runs or batches. It does not rerun anything. In v1 it requires at least 2 run bundles and all selected runs must be from the same case.
 
 ## Reports And Artifacts
 
-The terminal report includes:
+When artifact writing is enabled, the harness writes:
 
-- case name and generated project key
-- agent status
-- overall pass/fail result
-- per-check validation results
-- agent stats when available
-- a short agent summary
+- run bundles containing:
+  - `request.json`
+  - `agent_response.json`
+  - `validation_result.json`
+  - `run_manifest.json`
+  - `report.txt`
+  - `agent_stdout.txt`
+  - `agent_stderr.txt`
+- batch bundles containing:
+  - `batch_manifest.json`
+  - `report.txt`
+  - `runs/` with child run bundles
+- single-case batch compare outputs:
+  - `compare_summary.json`
+  - `compare_report.txt`
 
-With `--artifacts-dir`, each run writes a dedicated run bundle containing:
+The key separation is:
 
-- `request.json`
-- `agent_response.json`
-- `validation_result.json`
-- `run_manifest.json`
-- `report.txt`
-- `agent_stdout.txt`
-- `agent_stderr.txt`
+- `validation_result.json`: evaluator output only
+- `agent_response.json`: sanitized agent-side response
+- `run_manifest.json`: run metadata plus execution and validation summaries
 
-The run manifest records the stable run metadata:
+Persisted agent output is sanitized to redact exact secret values and common auth patterns.
 
-- run id and timestamps
-- case name and case file path
-- profile name and profile digest
-- DSS instance URL
-- source workspace and staged run workspace
-- project key and whether the DSS project was kept
-- execution summary such as status, return code, timeout, duration, tokens, and tool use
-- validation summary such as check counts and overall evaluator pass/fail
+## Customizing The Harness
 
-The persisted `validation_result.json` contains evaluator output only. Basic harness execution checks such as agent status and return code are summarized separately in `run_manifest.json`.
+The built-in cases and evaluators are examples, not the limit of the harness.
 
-Batch runs write a self-contained batch directory containing:
+- Add your own benchmark scenarios under `cases/`.
+- Define the expected outcome for each scenario through built-in or custom evaluators.
+- Keep scenario-specific judgment in evaluators rather than hard-coding it into the harness.
 
-- `batch_manifest.json`
-- `report.txt`
-- `runs/` with the normal child run bundles
+See [docs/cases-and-evaluators.md](docs/cases-and-evaluators.md) for case authoring and evaluator details.
 
-Single-case batches also write:
+## More Detail
 
-- `compare_summary.json`
-- `compare_report.txt`
+Detailed reference material lives in `docs/`:
 
-Persisted agent output and verbose report excerpts are sanitized to redact exact environment secret values and common auth patterns such as bearer tokens and `*_api_key` fields.
-
-If `--keep` is also set, the report includes the DSS project URL.
-
-## CLI Flags
-
-`run_test.py` is the main entrypoint.
-
-Supported flags:
-
-- `list-cases`: show available cases and exit
-- `describe-case <case>`: show the details of one case and exit
-- `list-profiles`: show configured profiles and exit
-- `run <case> --profile <name>`: run one case against one profile
-- `batch --cases ... --profiles ...`: run a case/profile matrix sequentially
-- `compare <dir> [<dir> ...]`: compare run bundle and/or batch artifact directories
-- `run ... --keep` / `--no-keep`: keep or discard the generated DSS project after validation
-- `run ... --verbose` / `--no-verbose`: include or suppress agent stdout and stderr excerpts in the terminal report
-- `run ... --artifacts-dir`: write request/response/report files to disk
-- `run ... --agent-timeout-seconds`: abort the agent process after a timeout; default `900`
-
-## Reference
-
-Deeper reference material lives here:
-
-- [`docs/agent-contract.md`](docs/agent-contract.md): how the harness talks to agents, plus the bundled wrappers
-- [`docs/cases-and-evaluators.md`](docs/cases-and-evaluators.md): how to write cases and how the built-in checks work
+- [docs/agent-contract.md](docs/agent-contract.md): request/response protocol, bundled wrappers, and workspace behavior
+- [docs/cases-and-evaluators.md](docs/cases-and-evaluators.md): case authoring, built-in evaluators, and custom evaluators
 
 ## Repository Layout
 
 - `run_test.py`: main CLI entrypoint
-- `cases/*.json`: case definitions
-- `docs/*.md`: protocol and case-authoring reference
-- `evals/__init__.py`: setup, validation, teardown, and evaluator loading
-- `evals/builtins.py`: built-in evaluators and their spec validators
-- `agents/*.py`: bundled agent wrappers
-- `suite/*.py`: request/response, prompting, stats, and report helpers
-
-## Typical Usage Pattern
-
-1. Pick a case from `cases/` or add a new one.
-2. Define a profile in `.dataiku-agent-suite.json` that points at a built-in wrapper or your own CLI command.
-3. Let the harness create a fresh DSS project and run the agent.
-4. Read the terminal report, or inspect the artifact bundle and kept project.
+- `cases/`: case definitions
+- `agents/`: bundled agent wrappers
+- `evals/`: setup, validation, teardown, and evaluator logic
+- `suite/`: orchestration, artifacts, batch, compare, and report helpers
+- `docs/`: reference documentation
