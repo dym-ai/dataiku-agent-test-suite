@@ -1,0 +1,12 @@
+[project]
+name = "dataiku-agent-test-suite"
+version = "0.1.0"
+description = "Benchmark harness for testing AI agents against Dataiku tasks"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dataiku-api-client",
+]
+
+[tool.uv]
+package = false
