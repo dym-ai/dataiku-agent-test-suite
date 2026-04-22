@@ -33,7 +33,7 @@ def run_case(
     print(f"--- Setting up case: {case_name}")
     started_at = datetime.now(timezone.utc)
     try:
-        case = setup(client, case_name)
+        case = setup(client, case_name, profile_name=profile_name or agent_command)
     except Exception as exc:
         print(f"Setup failed: {exc}")
         return {
@@ -46,6 +46,7 @@ def run_case(
             "project_key": None,
         }
     print(f"    Project: {case['project_key']}")
+    print(f"    Name: {case['project_name']}")
     print(f"    Sources: {case['sources']}")
 
     try:
@@ -85,6 +86,10 @@ def run_case(
                 case["project_key"],
                 agent_result,
                 result,
+                project_name=case.get("project_name"),
+                profile_name=profile_name or agent_command,
+                agent_command=agent_command,
+                harness_repo_root=repo_root,
                 project_url=build_project_url(base_url, case["project_key"]) if keep else None,
                 verbose=verbose,
             )
@@ -120,6 +125,10 @@ def run_case(
                     case["project_key"],
                     agent_result,
                     result,
+                    project_name=case.get("project_name"),
+                    profile_name=profile_name or agent_command,
+                    agent_command=agent_command,
+                    harness_repo_root=repo_root,
                     project_url=build_project_url(base_url, case["project_key"]) if keep else None,
                     artifacts_dir=artifact_path,
                     verbose=verbose,

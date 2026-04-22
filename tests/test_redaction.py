@@ -74,12 +74,18 @@ class RedactionTests(unittest.TestCase):
                 "COBUILD_DATES",
                 agent_result,
                 validation_result,
+                project_name="[Agent Test] dates | claude-vanilla | 2026-04-22 12:07",
+                profile_name="claude-vanilla",
+                agent_command="claude",
                 verbose=True,
             )
 
         self.assertNotIn(secret, report)
         self.assertIn(REDACTION_TOKEN, report)
         self.assertIn("COBUILD", report)
+        self.assertIn("Profile: claude-vanilla", report)
+        self.assertIn("Coding Agent: claude", report)
+        self.assertIn("Execution: completed", report)
 
 
 if __name__ == "__main__":

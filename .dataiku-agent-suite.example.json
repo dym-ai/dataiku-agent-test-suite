@@ -2,7 +2,7 @@
   "defaults": {
     "artifacts_dir": "./artifacts",
     "agent_timeout_seconds": 900,
-    "keep": false,
+    "keep": true,
     "verbose": false,
     "env": {
       "DATAIKU_URL": "${DATAIKU_URL}",

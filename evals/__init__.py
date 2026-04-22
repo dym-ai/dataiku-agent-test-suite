@@ -4,8 +4,8 @@ import importlib
 import inspect
 import json
 import os
-import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from .builtins import BUILTIN_EVALUATORS, BUILTIN_EVALUATOR_VALIDATORS
@@ -59,7 +59,7 @@ def _load_case_from_path(path):
     return case
 
 
-def setup(client, case_name):
+def setup(client, case_name, profile_name=None):
     """Create a clean project and prepare source datasets for a case.
 
     Returns dict with:
@@ -74,12 +74,13 @@ def setup(client, case_name):
     source_project = client.get_project(source_project_name) if source_project_name else None
 
     project_key = _build_project_key(case_name)
+    project_name = _build_project_name(case_name, profile_name=profile_name)
     auth_info = client.get_auth_info()
     owner = auth_info.get("associatedDSSUser") or auth_info["authIdentifier"]
 
     created_project = False
     try:
-        client.create_project(project_key, project_key, owner=owner)
+        client.create_project(project_key, project_name, owner=owner)
         created_project = True
         test_project = client.get_project(project_key)
 
@@ -101,6 +102,7 @@ def setup(client, case_name):
 
     return {
         "project_key": project_key,
+        "project_name": project_name,
         "prompt": case["prompt"],
         "sources": copied_names,
         "case_path": str(case_path),
@@ -211,11 +213,30 @@ def _validate_eval_spec(case, spec, path, index):
         raise CaseValidationError(f"{path}: evals[{index}] invalid: {exc}") from exc
 
 
-def _build_project_key(case_name):
-    ts = int(time.time())
-    suffix = uuid.uuid4().hex[:8].upper()
-    safe_case_name = "".join(ch if ch.isalnum() else "_" for ch in case_name.upper()).strip("_")
-    return f"COBUILD_{safe_case_name}_{ts}_{suffix}"
+def _build_project_key(case_name, now=None, suffix=None):
+    now = now or datetime.now().astimezone()
+    suffix = (suffix or uuid.uuid4().hex[:8]).upper()
+    safe_case_name = _build_project_token(case_name)
+    return f"AGT_{safe_case_name}_{now.strftime('%Y%m%d_%H%M')}_{suffix}"
+
+
+def _build_project_name(case_name, profile_name=None, now=None):
+    now = now or datetime.now().astimezone()
+    parts = [f"[Agent Test] {_format_case_display_name(case_name)}"]
+    if profile_name:
+        parts.append(profile_name.strip())
+    parts.append(now.strftime("%Y-%m-%d %H:%M"))
+    return " | ".join(parts)
+
+
+def _build_project_token(value):
+    token = "".join(ch if ch.isalnum() else "_" for ch in str(value).upper()).strip("_")
+    return token or "CASE"
+
+
+def _format_case_display_name(case_name):
+    label = str(case_name).replace("_", " ").replace("-", " ").strip()
+    return " ".join(label.split()) or "unnamed case"
 
 
 def _delete_project_quietly(client, project_key):

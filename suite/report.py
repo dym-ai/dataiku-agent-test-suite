@@ -1,5 +1,9 @@
 """Human-friendly formatting for test results."""
 
+import shlex
+import subprocess
+from pathlib import Path
+
 from suite.redaction import redact_value
 
 
@@ -8,17 +12,40 @@ def format_report(
     project_key,
     agent_result,
     validation_result,
+    project_name=None,
+    profile_name=None,
+    agent_command=None,
+    harness_repo_root=None,
     project_url=None,
     artifacts_dir=None,
     verbose=False,
 ):
     agent_result = redact_value(agent_result)
+    harness_name, harness_git_sha = _describe_harness(harness_repo_root)
+    coding_agent, harness_adapter = _describe_agent_command(agent_command)
     lines = [
         f"Case: {case_name}",
         f"Project: {project_key}",
-        f"Agent: {agent_result.get('status', 'unknown')}",
-        f"Result: {'PASS' if validation_result['passed'] else 'FAIL'}",
     ]
+    if project_name:
+        lines.append(f"Project Name: {project_name}")
+    if profile_name:
+        lines.append(f"Profile: {profile_name}")
+    if coding_agent:
+        lines.append(f"Coding Agent: {coding_agent}")
+    if harness_adapter:
+        lines.append(f"Harness Adapter: {harness_adapter}")
+    elif agent_command:
+        lines.append(f"Agent Command: {agent_command}")
+    if harness_name:
+        harness_line = f"Harness: {harness_name}"
+        if harness_git_sha:
+            harness_line += f" @ {harness_git_sha[:12]}"
+        lines.append(harness_line)
+    lines.extend([
+        f"Execution: {agent_result.get('status', 'unknown')}",
+        f"Result: {'PASS' if validation_result['passed'] else 'FAIL'}",
+    ])
 
     if project_url:
         lines.append(f"Project URL: {project_url}")
@@ -273,6 +300,51 @@ def _key_tool_inputs(name, inp):
 
     # Fallback: first 3 keys
     return list(inp.items())[:3]
+
+
+def _describe_agent_command(agent_command):
+    if not agent_command:
+        return None, None
+
+    try:
+        parts = shlex.split(agent_command)
+    except ValueError:
+        return agent_command, None
+
+    if not parts:
+        return None, None
+
+    agent_basename = Path(parts[-1]).name
+    if agent_basename.endswith(".py") and len(parts) >= 2:
+        stem = Path(parts[-1]).stem
+        if stem in {"claude", "codex"}:
+            return stem, agent_command
+
+    return Path(parts[0]).name, agent_command
+
+
+def _describe_harness(harness_repo_root):
+    if harness_repo_root is None:
+        return None, None
+
+    repo_root = Path(harness_repo_root)
+    return repo_root.name, _git_sha(repo_root)
+
+
+def _git_sha(path):
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
+        return None
+
+    sha = completed.stdout.strip()
+    return sha or None
 
 
 CHECK_FORMATTERS = {
