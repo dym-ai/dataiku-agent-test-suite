@@ -83,8 +83,8 @@ class RedactionTests(unittest.TestCase):
         self.assertNotIn(secret, report)
         self.assertIn(REDACTION_TOKEN, report)
         self.assertIn("COBUILD", report)
-        self.assertIn("Profile: claude-vanilla", report)
-        self.assertIn("Coding Agent: claude", report)
+        self.assertIn("Setup: claude-vanilla", report)
+        self.assertIn("Agent: claude", report)
         self.assertIn("Execution: completed", report)
 
 

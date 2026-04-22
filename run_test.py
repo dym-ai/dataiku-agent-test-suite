@@ -181,7 +181,7 @@ def run(
                     os.environ[name] = value
 
 
-def batch(cases, profiles, artifacts_dir=None):
+def batch(cases, profiles, artifacts_dir=None, max_parallel=1):
     def run_one(case_name, settings, child_artifacts_root):
         return run(
             case_name,
@@ -198,7 +198,7 @@ def batch(cases, profiles, artifacts_dir=None):
             env=settings["env"],
         )
 
-    return run_batch(run_one, cases, profiles, artifacts_root=artifacts_dir)
+    return run_batch(run_one, cases, profiles, artifacts_root=artifacts_dir, max_parallel=max_parallel)
 
 
 def compare(paths):
@@ -248,7 +248,7 @@ if __name__ == "__main__":
         help="Maximum time to wait for the agent process before aborting it (default: 900)",
     )
 
-    batch_parser = subparsers.add_parser("batch", help="Run multiple cases against multiple profiles sequentially")
+    batch_parser = subparsers.add_parser("batch", help="Run multiple cases against multiple profiles")
     batch_parser.add_argument("--cases", nargs="+", required=True, help="One or more case names")
     batch_parser.add_argument("--profiles", nargs="+", required=True, help="One or more profile names")
     batch_parser.add_argument(
@@ -272,6 +272,12 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="Maximum time to wait for each agent process before aborting it (default: 900)",
+    )
+    batch_parser.add_argument(
+        "--max-parallel",
+        type=int,
+        default=1,
+        help="Maximum number of runs to execute at once (default: 1)",
     )
 
     compare_parser = subparsers.add_parser("compare", help="Compare one or more run/batch artifact directories")
@@ -319,10 +325,13 @@ if __name__ == "__main__":
                 env=settings["env"],
             )
         elif args.command == "batch":
+            if args.max_parallel < 1:
+                parser.error("--max-parallel must be at least 1")
             result = batch(
                 args.cases,
                 settings,
                 artifacts_dir=settings[0]["artifacts_dir"] if settings else None,
+                max_parallel=args.max_parallel,
             )
         else:
             _, report_text = compare(args.paths)

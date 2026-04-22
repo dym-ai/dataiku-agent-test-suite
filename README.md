@@ -149,7 +149,13 @@ uv run python run_test.py run dates --profile codex-vanilla --artifacts-dir ./ar
 uv run python run_test.py batch --cases dates crane --profiles codex-vanilla repo-codex
 ```
 
-`batch` orchestrates multiple normal runs. It executes the full case/profile matrix sequentially and writes one batch directory with nested child run bundles when artifacts are enabled.
+Run more than one batch child at a time:
+
+```bash
+uv run python run_test.py batch --cases dates crane --profiles codex-vanilla repo-codex --max-parallel 2
+```
+
+`batch` orchestrates multiple normal runs. It writes one batch directory with nested child run bundles when artifacts are enabled. By default it runs sequentially; `--max-parallel` enables bounded parallelism.
 
 ### 6. Compare saved artifacts
 

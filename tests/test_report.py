@@ -21,10 +21,11 @@ class ReportFormattingTests(unittest.TestCase):
             )
 
         self.assertIn("Project Name: [Agent Test] dates | claude-vanilla | 2026-04-22 14:31", report)
-        self.assertIn("Profile: claude-vanilla", report)
-        self.assertIn("Coding Agent: claude", report)
-        self.assertIn("Harness Adapter: /usr/bin/python3 /tmp/agents/claude.py", report)
-        self.assertIn("Harness: ", report)
+        self.assertIn("Setup: claude-vanilla", report)
+        self.assertIn("Agent: claude", report)
+        self.assertIn("Agent Workspace: none (fresh temporary workspace)", report)
+        self.assertIn("Runner: bundled claude wrapper", report)
+        self.assertIn("Test Harness: ", report)
         self.assertIn("Execution: completed", report)
         self.assertNotIn("Agent: completed", report)
 

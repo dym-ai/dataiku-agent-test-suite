@@ -15,6 +15,7 @@ def format_report(
     project_name=None,
     profile_name=None,
     agent_command=None,
+    agent_workspace_source=None,
     harness_repo_root=None,
     project_url=None,
     artifacts_dir=None,
@@ -22,7 +23,7 @@ def format_report(
 ):
     agent_result = redact_value(agent_result)
     harness_name, harness_git_sha = _describe_harness(harness_repo_root)
-    coding_agent, harness_adapter = _describe_agent_command(agent_command)
+    coding_agent, runner = _describe_agent_command(agent_command)
     lines = [
         f"Case: {case_name}",
         f"Project: {project_key}",
@@ -30,15 +31,16 @@ def format_report(
     if project_name:
         lines.append(f"Project Name: {project_name}")
     if profile_name:
-        lines.append(f"Profile: {profile_name}")
+        lines.append(f"Setup: {profile_name}")
     if coding_agent:
-        lines.append(f"Coding Agent: {coding_agent}")
-    if harness_adapter:
-        lines.append(f"Harness Adapter: {harness_adapter}")
+        lines.append(f"Agent: {coding_agent}")
+    lines.append(f"Agent Workspace: {_format_agent_workspace_source(agent_workspace_source)}")
+    if runner:
+        lines.append(f"Runner: {runner}")
     elif agent_command:
-        lines.append(f"Agent Command: {agent_command}")
+        lines.append(f"Runner: {agent_command}")
     if harness_name:
-        harness_line = f"Harness: {harness_name}"
+        harness_line = f"Test Harness: {harness_name}"
         if harness_git_sha:
             harness_line += f" @ {harness_git_sha[:12]}"
         lines.append(harness_line)
@@ -318,9 +320,15 @@ def _describe_agent_command(agent_command):
     if agent_basename.endswith(".py") and len(parts) >= 2:
         stem = Path(parts[-1]).stem
         if stem in {"claude", "codex"}:
-            return stem, agent_command
+            return stem, f"bundled {stem} wrapper"
 
     return Path(parts[0]).name, agent_command
+
+
+def _format_agent_workspace_source(agent_workspace_source):
+    if not agent_workspace_source:
+        return "none (fresh temporary workspace)"
+    return str(agent_workspace_source)
 
 
 def _describe_harness(harness_repo_root):
