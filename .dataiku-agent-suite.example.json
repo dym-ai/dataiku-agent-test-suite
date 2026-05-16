@@ -1,5 +1,6 @@
 {
   "defaults": {
+    "profile": "codex-vanilla",
     "artifacts_dir": "./artifacts",
     "agent_timeout_seconds": 900,
     "keep": true,
@@ -14,6 +15,18 @@
       "description": "Plain Codex baseline with no specialized workspace",
       "agent_command": "codex",
       "tags": ["codex", "vanilla"]
+    },
+    "dev-kit-claude": {
+      "description": "Claude using a local dataiku-agent-dev-kit checkout",
+      "agent_command": "claude",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit",
+      "tags": ["claude", "dev-kit"]
+    },
+    "dev-kit-codex": {
+      "description": "Codex using a local dataiku-agent-dev-kit checkout",
+      "agent_command": "codex",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit",
+      "tags": ["codex", "dev-kit"]
     },
     "repo-codex": {
       "description": "Codex using an external repo workspace",

@@ -224,7 +224,7 @@ if __name__ == "__main__":
 
     run_parser = subparsers.add_parser("run", help="Run one case against one profile")
     run_parser.add_argument("case_name")
-    run_parser.add_argument("--profile", required=True, help="Named profile from .dataiku-agent-suite.json")
+    run_parser.add_argument("--profile", help="Named profile from .dataiku-agent-suite.json. Defaults to defaults.profile.")
     run_parser.add_argument(
         "--keep",
         action=argparse.BooleanOptionalAction,
