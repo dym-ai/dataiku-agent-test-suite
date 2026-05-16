@@ -96,6 +96,10 @@ Minimal example:
     "codex-vanilla": {
       "agent_command": "codex"
     },
+    "dev-kit-codex": {
+      "agent_command": "codex",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit"
+    },
     "repo-codex": {
       "agent_command": "codex",
       "agent_workspace": "/path/to/your-agent-repo"

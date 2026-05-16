@@ -16,6 +16,12 @@
       "agent_command": "codex",
       "tags": ["codex", "vanilla"]
     },
+    "dev-kit-codex": {
+      "description": "Codex using a local dataiku-agent-dev-kit checkout",
+      "agent_command": "codex",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit",
+      "tags": ["codex", "dev-kit"]
+    },
     "repo-codex": {
       "description": "Codex using an external repo workspace",
       "agent_command": "codex",
