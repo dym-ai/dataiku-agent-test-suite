@@ -1,25 +1,12 @@
 # TODO
 
-## High Priority
+## Benchmark Integrity
 
-- Redesign the CLI around explicit subcommands such as `run`, `list-cases`, `describe-case`, and `doctor`.
-- Add an interactive `init` flow that writes a repo-local harness config file for first-time setup.
-- Add CLI support for running multiple named cases in one invocation.
-- Add CLI support for running all cases in the `cases/` directory.
-- Decide how multi-case runs should report aggregate results and exit codes.
-- Add example cases that use `flow_shape_match`.
-- Add example cases that use `recipe_config_match`.
-
-## Medium Priority
-
-- Add better debugging artifacts for failed flow/config evals, such as matched alias mappings and recipe config diffs.
-- Consider a dedicated snapshot/export helper for authoring `flow_shape_match` and `recipe_config_match` expectations.
-- Decide how much normalization `recipe_config_match` should apply in `normalized` mode.
-- Decide whether built-in cases should demonstrate stricter evals or remain minimal output-only examples.
-- Consider making project key generation collision-resistant for rapid or parallel runs.
-
-## Low Priority
-
-- Improve `output_datasets` with an optional full-dataset comparison mode for small outputs.
-- Decide whether `output_datasets` should support key-based full-row matching beyond sampled rows.
-- Consider documenting a recommended structure for custom evaluator modules.
+- Add a `doctor` command that verifies DSS credentials, configured profiles, agent commands, workspace paths, MCP availability, and artifact/test prerequisites before a run.
+- Add an `init` command that writes a repo-local `.dataiku-agent-suite.json` for first-time setup, including a ready-to-edit `dataiku-agent-dev-kit` profile.
+- Add profile-level MCP wiring so Codex/Claude runs can point at the staged `dataiku-agent-dev-kit` checkout, not a globally configured MCP server from another path.
+- Add `run --all` support to run every case in `cases/`.
+- Add `run --repeat N` support so performance comparisons use repeated runs instead of one-off samples.
+- Add benchmark summaries with pass rate, median duration, median token usage, median tool usage, and variance across repeated runs.
+- Record digests for all case fixtures, not only `case.json`, so artifacts fully identify the evaluated input set.
+- Document and wire a reliable local test command, either by adding `pytest` as a dev dependency or documenting `uv run python -m unittest discover -s tests -p 'test_*.py'`.
