@@ -100,6 +100,10 @@ Minimal example:
       "agent_command": "codex",
       "agent_workspace": "/path/to/dataiku-agent-dev-kit"
     },
+    "dev-kit-claude": {
+      "agent_command": "claude",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit"
+    },
     "repo-codex": {
       "agent_command": "codex",
       "agent_workspace": "/path/to/your-agent-repo"

@@ -16,6 +16,12 @@
       "agent_command": "codex",
       "tags": ["codex", "vanilla"]
     },
+    "dev-kit-claude": {
+      "description": "Claude using a local dataiku-agent-dev-kit checkout",
+      "agent_command": "claude",
+      "agent_workspace": "/path/to/dataiku-agent-dev-kit",
+      "tags": ["claude", "dev-kit"]
+    },
     "dev-kit-codex": {
       "description": "Codex using a local dataiku-agent-dev-kit checkout",
       "agent_command": "codex",
