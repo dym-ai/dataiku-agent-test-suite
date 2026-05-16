@@ -84,6 +84,7 @@ Minimal example:
 ```json
 {
   "defaults": {
+    "profile": "codex-vanilla",
     "artifacts_dir": "./artifacts",
     "agent_timeout_seconds": 900,
     "env": {
@@ -108,6 +109,7 @@ Notes:
 - `agent_command` is the command the harness launches.
 - `agent_workspace` is optional.
 - If `agent_workspace` is set, the harness copies it into a temporary isolated run workspace for each run.
+- `defaults.profile` is the profile used by `run` when `--profile` is omitted.
 
 ### 3. Inspect available cases and profiles
 
@@ -120,27 +122,33 @@ uv run python run_test.py list-profiles
 ### 4. Run one case
 
 ```bash
-uv run python run_test.py run dates --profile codex-vanilla
+uv run python run_test.py run dates
 ```
 
 A successful `run` creates a fresh DSS project, executes the selected profile against the case, validates the result, and prints a report.
 
+Override the configured default profile for a one-off run:
+
+```bash
+uv run python run_test.py run dates --profile repo-codex
+```
+
 Keep the generated DSS project so you can inspect it afterward:
 
 ```bash
-uv run python run_test.py run dates --profile repo-codex --keep
+uv run python run_test.py run dates --keep
 ```
 
 Show agent stdout/stderr excerpts in the terminal report:
 
 ```bash
-uv run python run_test.py run dates --profile codex-vanilla --verbose
+uv run python run_test.py run dates --verbose
 ```
 
 Write the full run bundle to disk:
 
 ```bash
-uv run python run_test.py run dates --profile codex-vanilla --artifacts-dir ./artifacts
+uv run python run_test.py run dates --artifacts-dir ./artifacts
 ```
 
 ### 5. Run a small batch

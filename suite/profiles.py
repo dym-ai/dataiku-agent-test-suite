@@ -62,6 +62,13 @@ def resolve_profile(config_path, profile_name):
             f"No profiles configured in {config_path}. Define a 'profiles' object in .dataiku-agent-suite.json."
         )
 
+    if profile_name is None:
+        profile_name = config["defaults"].get("profile")
+        if not profile_name:
+            raise ValueError(
+                f"No profile configured. Pass --profile, or set defaults.profile in {config_path}."
+            )
+
     if profile_name not in profiles:
         available = ", ".join(sorted(profiles)) or "(none)"
         raise ValueError(f"Unknown profile '{profile_name}'. Available profiles: {available}")
@@ -89,11 +96,13 @@ def _validate_defaults(raw_defaults, config_path):
     if not isinstance(raw_defaults, dict):
         raise ValueError(f"{config_path}: 'defaults' must be an object")
 
-    unknown_keys = sorted(set(raw_defaults) - {"artifacts_dir", "agent_timeout_seconds", "keep", "verbose", "env"})
+    unknown_keys = sorted(set(raw_defaults) - {"profile", "artifacts_dir", "agent_timeout_seconds", "keep", "verbose", "env"})
     if unknown_keys:
         raise ValueError(f"{config_path}: unsupported defaults keys: {', '.join(unknown_keys)}")
 
     defaults = {}
+    if "profile" in raw_defaults:
+        defaults["profile"] = _require_string(raw_defaults["profile"], config_path, "defaults.profile")
     if "artifacts_dir" in raw_defaults:
         defaults["artifacts_dir"] = _resolve_path(raw_defaults["artifacts_dir"], config_path, "defaults.artifacts_dir")
     if "agent_timeout_seconds" in raw_defaults:

@@ -19,6 +19,7 @@ class ProfileConfigTests(unittest.TestCase):
                 json.dumps(
                     {
                         "defaults": {
+                            "profile": "codex-vanilla",
                             "artifacts_dir": "./artifacts",
                             "agent_timeout_seconds": 1200,
                             "keep": True,
@@ -41,6 +42,7 @@ class ProfileConfigTests(unittest.TestCase):
 
             config = load_profile_config(config_path)
 
+            self.assertEqual(config["defaults"]["profile"], "codex-vanilla")
             self.assertEqual(config["defaults"]["agent_timeout_seconds"], 1200)
             self.assertEqual(config["defaults"]["artifacts_dir"], (root / "artifacts").resolve())
             self.assertEqual(sorted(config["profiles"]), ["codex-vanilla", "repo-codex"])
@@ -87,6 +89,36 @@ class ProfileConfigTests(unittest.TestCase):
                     "EXTRA_FLAG": "enabled",
                 },
             )
+
+    def test_resolve_profile_uses_default_profile_when_name_is_omitted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / ".dataiku-agent-suite.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "defaults": {"profile": "codex-vanilla"},
+                        "profiles": {
+                            "codex-vanilla": {"agent_command": "codex"},
+                            "other": {"agent_command": "other-agent"},
+                        },
+                    }
+                )
+            )
+
+            resolved = resolve_profile(config_path, None)
+
+            self.assertEqual(resolved["profile_name"], "codex-vanilla")
+            self.assertEqual(resolved["agent_command"], "codex")
+
+    def test_requires_default_or_explicit_profile(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / ".dataiku-agent-suite.json"
+            config_path.write_text(json.dumps({"profiles": {"codex": {"agent_command": "codex"}}}))
+
+            with self.assertRaisesRegex(ValueError, "defaults.profile"):
+                resolve_profile(config_path, None)
 
     def test_list_profiles_returns_display_summaries(self):
         with tempfile.TemporaryDirectory() as temp_dir:

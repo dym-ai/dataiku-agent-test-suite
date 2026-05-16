@@ -1,5 +1,6 @@
 {
   "defaults": {
+    "profile": "codex-vanilla",
     "artifacts_dir": "./artifacts",
     "agent_timeout_seconds": 900,
     "keep": true,
