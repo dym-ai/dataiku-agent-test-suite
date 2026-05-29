@@ -28,11 +28,11 @@ class ProfileConfigTests(unittest.TestCase):
                         "profiles": {
                             "codex-vanilla": {
                                 "description": "Vanilla Codex",
-                                "agent_command": "codex",
+                                "agent": "codex",
                                 "tags": ["codex", "vanilla"],
                             },
                             "repo-codex": {
-                                "agent_command": "codex",
+                                "agent": "codex",
                                 "agent_workspace": str(workspace),
                             },
                         },
@@ -65,7 +65,7 @@ class ProfileConfigTests(unittest.TestCase):
                         },
                         "profiles": {
                             "codex-vanilla": {
-                                "agent_command": "codex",
+                                "agent": "codex",
                                 "env": {
                                     "EXTRA_FLAG": "enabled",
                                 },
@@ -78,7 +78,7 @@ class ProfileConfigTests(unittest.TestCase):
             with patch.dict(os.environ, {"DATAIKU_URL": "http://example", "DATAIKU_API_KEY": "secret"}, clear=False):
                 resolved = resolve_profile(config_path, "codex-vanilla")
 
-            self.assertEqual(resolved["agent_command"], "codex")
+            self.assertEqual(resolved["agent"], "codex")
             self.assertEqual(resolved["artifacts_dir"], (root / "artifacts").resolve())
             self.assertEqual(resolved["agent_timeout_seconds"], 900)
             self.assertEqual(
@@ -99,8 +99,8 @@ class ProfileConfigTests(unittest.TestCase):
                     {
                         "defaults": {"profile": "codex-vanilla"},
                         "profiles": {
-                            "codex-vanilla": {"agent_command": "codex"},
-                            "other": {"agent_command": "other-agent"},
+                            "codex-vanilla": {"agent": "codex"},
+                            "other": {"agent": "other-agent"},
                         },
                     }
                 )
@@ -109,13 +109,13 @@ class ProfileConfigTests(unittest.TestCase):
             resolved = resolve_profile(config_path, None)
 
             self.assertEqual(resolved["profile_name"], "codex-vanilla")
-            self.assertEqual(resolved["agent_command"], "codex")
+            self.assertEqual(resolved["agent"], "codex")
 
     def test_requires_default_or_explicit_profile(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config_path = root / ".dataiku-agent-suite.json"
-            config_path.write_text(json.dumps({"profiles": {"codex": {"agent_command": "codex"}}}))
+            config_path.write_text(json.dumps({"profiles": {"codex": {"agent": "codex"}}}))
 
             with self.assertRaisesRegex(ValueError, "defaults.profile"):
                 resolve_profile(config_path, None)
@@ -128,8 +128,8 @@ class ProfileConfigTests(unittest.TestCase):
                 json.dumps(
                     {
                         "profiles": {
-                            "b-profile": {"agent_command": "b-agent", "description": "B"},
-                            "a-profile": {"agent_command": "a-agent", "description": "A"},
+                            "b-profile": {"agent": "b-agent", "description": "B"},
+                            "a-profile": {"agent": "a-agent", "description": "A"},
                         }
                     }
                 )
@@ -138,12 +138,13 @@ class ProfileConfigTests(unittest.TestCase):
             profiles = list_profiles(config_path)
 
             self.assertEqual([profile["name"] for profile in profiles], ["a-profile", "b-profile"])
+            self.assertEqual(profiles[0]["agent"], "a-agent")
 
     def test_requires_existing_named_profile(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config_path = root / ".dataiku-agent-suite.json"
-            config_path.write_text(json.dumps({"profiles": {"codex": {"agent_command": "codex"}}}))
+            config_path.write_text(json.dumps({"profiles": {"codex": {"agent": "codex"}}}))
 
             with self.assertRaisesRegex(ValueError, "Unknown profile 'missing'"):
                 resolve_profile(config_path, "missing")
@@ -156,7 +157,7 @@ class ProfileConfigTests(unittest.TestCase):
                 json.dumps(
                     {
                         "defaults": {"env": {"DATAIKU_URL": "${DATAIKU_URL}"}},
-                        "profiles": {"codex": {"agent_command": "codex"}},
+                        "profiles": {"codex": {"agent": "codex"}},
                     }
                 )
             )
@@ -174,7 +175,7 @@ class ProfileConfigTests(unittest.TestCase):
                     {
                         "profiles": {
                             "codex": {
-                                "agent_command": "codex",
+                                "agent": "codex",
                                 "agent_workspace": "./workspace",
                             }
                         }

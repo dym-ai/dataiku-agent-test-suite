@@ -57,7 +57,7 @@ def write_run_artifacts(
         "profile_digest": _sha256_json(_safe_profile_digest_payload(profile)),
         "profile": {
             "description": profile.get("description", ""),
-            "agent_command": profile["agent_command"],
+            "agent": profile["agent"],
             "agent_workspace_source": str(profile["agent_workspace"]) if profile.get("agent_workspace") else None,
             "tags": list(profile.get("tags") or []),
             "dss_url": profile.get("dss_url"),
@@ -171,7 +171,7 @@ def _safe_profile_digest_payload(profile):
     return {
         "name": profile["name"],
         "description": profile.get("description", ""),
-        "agent_command": profile["agent_command"],
+        "agent": profile["agent"],
         "agent_workspace": str(profile["agent_workspace"]) if profile.get("agent_workspace") else None,
         "tags": list(profile.get("tags") or []),
         "dss_url": profile.get("dss_url"),

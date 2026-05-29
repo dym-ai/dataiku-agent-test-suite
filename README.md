@@ -42,11 +42,11 @@ you want to benchmark. Common profiles look like:
   },
   "profiles": {
     "dev-kit-codex": {
-      "agent_command": "codex",
+      "agent": "codex",
       "agent_workspace": "/path/to/dataiku-agent-dev-kit"
     },
     "dev-kit-claude": {
-      "agent_command": "claude",
+      "agent": "claude",
       "agent_workspace": "/path/to/dataiku-agent-dev-kit"
     }
   }

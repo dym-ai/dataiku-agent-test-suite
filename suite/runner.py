@@ -18,6 +18,7 @@ def run_case(
     base_url,
     case_name,
     agent_command,
+    agent=None,
     keep=False,
     agent_workspace=None,
     profile_name=None,
@@ -103,7 +104,7 @@ def run_case(
                     profile={
                         "name": profile_name or agent_command,
                         "description": profile_description,
-                        "agent_command": agent_command,
+                        "agent": agent or agent_command,
                         "agent_workspace": agent_workspace,
                         "tags": list(profile_tags or []),
                         "dss_url": base_url.rstrip("/"),

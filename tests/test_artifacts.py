@@ -31,7 +31,7 @@ class ArtifactWritingTests(unittest.TestCase):
                 profile={
                     "name": "codex-vanilla",
                     "description": "Plain Codex profile",
-                    "agent_command": "codex",
+                    "agent": "codex",
                     "agent_workspace": None,
                     "tags": ["codex", "vanilla"],
                     "dss_url": "https://dss.example.com",
@@ -99,6 +99,7 @@ class ArtifactWritingTests(unittest.TestCase):
             self.assertEqual(manifest["validation_result"]["failed_check_count"], 0)
             self.assertEqual(manifest["workspace"]["source_path"], str(source_workspace))
             self.assertEqual(manifest["workspace"]["run_path"], str(run_workspace))
+            self.assertEqual(manifest["profile"]["agent"], "codex")
             self.assertEqual(manifest["profile"]["dss_url"], "https://dss.example.com")
             self.assertEqual(manifest["artifacts"]["run_manifest"], "run_manifest.json")
             self.assertTrue(manifest["case_digest"].startswith("sha256:"))
