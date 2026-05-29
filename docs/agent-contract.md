@@ -33,7 +33,7 @@ If `agent_workspace` is configured, the harness copies that source workspace int
 
 Avoid pointing `agent_workspace` at the harness repository itself, because that can expose case definitions and evaluator logic to the agent.
 
-Bundled wrappers:
+Profile `agent` values of `codex` and `claude` select bundled wrappers:
 
 - `agents/codex.py`
 - `agents/claude.py`
@@ -52,7 +52,7 @@ or a repo-local config like:
 {
   "profiles": {
     "custom-agent": {
-      "agent_command": "python /path/to/my_agent.py"
+      "agent": "python /path/to/my_agent.py"
     }
   }
 }

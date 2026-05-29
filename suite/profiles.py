@@ -46,7 +46,7 @@ def list_profiles(config_path):
         profiles.append({
             "name": name,
             "description": profile.get("description", ""),
-            "agent_command": profile["agent_command"],
+            "agent": profile["agent"],
             "agent_workspace": profile.get("agent_workspace"),
             "tags": profile.get("tags", []),
         })
@@ -80,7 +80,7 @@ def resolve_profile(config_path, profile_name):
 
     return {
         "profile_name": profile_name,
-        "agent_command": profile["agent_command"],
+        "agent": profile["agent"],
         "agent_workspace": profile.get("agent_workspace"),
         "artifacts_dir": defaults.get("artifacts_dir"),
         "agent_timeout_seconds": defaults.get("agent_timeout_seconds", 900),
@@ -137,15 +137,15 @@ def _validate_profile(name, raw_profile, config_path):
     if not isinstance(raw_profile, dict):
         raise ValueError(f"{config_path}: profiles.{name} must be an object")
 
-    unknown_keys = sorted(set(raw_profile) - {"description", "agent_command", "agent_workspace", "env", "tags"})
+    unknown_keys = sorted(set(raw_profile) - {"description", "agent", "agent_workspace", "env", "tags"})
     if unknown_keys:
         raise ValueError(f"{config_path}: profiles.{name} has unsupported keys: {', '.join(unknown_keys)}")
 
-    if "agent_command" not in raw_profile:
-        raise ValueError(f"{config_path}: profiles.{name}.agent_command is required")
+    if "agent" not in raw_profile:
+        raise ValueError(f"{config_path}: profiles.{name}.agent is required")
 
     profile = {
-        "agent_command": _require_string(raw_profile["agent_command"], config_path, f"profiles.{name}.agent_command"),
+        "agent": _require_string(raw_profile["agent"], config_path, f"profiles.{name}.agent"),
     }
 
     if "description" in raw_profile:

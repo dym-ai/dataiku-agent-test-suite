@@ -13,24 +13,24 @@
   "profiles": {
     "codex-vanilla": {
       "description": "Plain Codex baseline with no specialized workspace",
-      "agent_command": "codex",
+      "agent": "codex",
       "tags": ["codex", "vanilla"]
     },
     "dev-kit-claude": {
       "description": "Claude using a local dataiku-agent-dev-kit checkout",
-      "agent_command": "claude",
+      "agent": "claude",
       "agent_workspace": "/path/to/dataiku-agent-dev-kit",
       "tags": ["claude", "dev-kit"]
     },
     "dev-kit-codex": {
       "description": "Codex using a local dataiku-agent-dev-kit checkout",
-      "agent_command": "codex",
+      "agent": "codex",
       "agent_workspace": "/path/to/dataiku-agent-dev-kit",
       "tags": ["codex", "dev-kit"]
     },
     "repo-codex": {
       "description": "Codex using an external repo workspace",
-      "agent_command": "codex",
+      "agent": "codex",
       "agent_workspace": "/path/to/your-agent-repo",
       "tags": ["codex", "repo"]
     }

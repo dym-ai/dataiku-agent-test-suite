@@ -132,7 +132,7 @@ def _print_case_description(case_name):
 
 def run(
     case_name,
-    agent_command,
+    agent,
     keep=False,
     agent_workspace=None,
     profile_name=None,
@@ -160,7 +160,8 @@ def run(
             client,
             url,
             case_name,
-            agent_command=_resolve_agent_command(agent_command),
+            agent=agent,
+            agent_command=_resolve_agent_command(agent),
             keep=keep,
             agent_workspace=agent_workspace,
             profile_name=profile_name,
@@ -185,7 +186,7 @@ def batch(cases, profiles, artifacts_dir=None, max_parallel=1):
     def run_one(case_name, settings, child_artifacts_root):
         return run(
             case_name,
-            agent_command=settings["agent_command"],
+            agent=settings["agent"],
             keep=settings["keep"],
             agent_workspace=settings["agent_workspace"],
             profile_name=settings["profile_name"],
@@ -312,7 +313,7 @@ if __name__ == "__main__":
         if args.command == "run":
             result = run(
                 args.case_name,
-                agent_command=settings["agent_command"],
+                agent=settings["agent"],
                 keep=settings["keep"],
                 agent_workspace=settings["agent_workspace"],
                 profile_name=settings["profile_name"],
